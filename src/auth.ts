@@ -15,8 +15,11 @@ export const docKeys = {
     pkg: (app: string, pkg: string) => `pkg:${app}:${pkg}`,
     tokenByHash: (hash: string) => `token:${hash}`,
     tokenById: (app: string, pkg: string, id: string) => `tokenid:${app}:${pkg}:${id}`,
-    releases: (app: string, pkg: string, rv: string) => `releases:${app}:${pkg}:${rv}`,
-    pointer: (app: string, channel: string, pkg: string, rv: string) => `pointer:${app}:${channel}:${pkg}:${rv}`,
+    // one document per version and per channel: nothing is ever read, modified and written back
+    release: (app: string, pkg: string, rv: string, version: string) => `${docKeys.releasePrefix(app, pkg, rv)}${version}`,
+    releasePrefix: (app: string, pkg: string, rv: string) => `release:${app}:${pkg}:${rv}:`,
+    pointer: (app: string, pkg: string, rv: string, channel: string) => `${docKeys.pointerPrefix(app, pkg, rv)}${channel}`,
+    pointerPrefix: (app: string, pkg: string, rv: string) => `pointer:${app}:${pkg}:${rv}:`,
 };
 
 export function bearer(c: Context): string | null {

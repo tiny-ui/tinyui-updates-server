@@ -1,13 +1,21 @@
 import type { Env } from "./env.ts";
 
-/** Metadata documents (small JSON) and immutable content objects; the only thing a deployment target has to provide. */
+/**
+ * Metadata documents (small JSON) and immutable content objects; the only thing a deployment target has to provide.
+ * Reads must see writes at once (a revoked token stops working now, a published pointer is served now), and
+ * `putObjectIfAbsent` must be atomic: a version's bytes are written once and never replaced.
+ */
 export interface Storage {
     getDoc<T>(key: string): Promise<T | null>;
     putDoc(key: string, value: unknown): Promise<void>;
     deleteDoc(key: string): Promise<void>;
+    /** Keys starting with [prefix]. */
+    listDocs(prefix: string): Promise<string[]>;
     getObject(key: string): Promise<StoredObject | null>;
+    streamObject(key: string): Promise<StreamedObject | null>;
     headObject(key: string): Promise<ObjectInfo | null>;
-    putObject(key: string, body: Uint8Array, sha256: string): Promise<void>;
+    /** False when something is already there, whatever it is. */
+    putObjectIfAbsent(key: string, body: Uint8Array, sha256: string): Promise<boolean>;
 }
 
 export interface ObjectInfo {
@@ -19,45 +27,73 @@ export interface StoredObject extends ObjectInfo {
     body: Uint8Array;
 }
 
-/** Cloudflare: documents in KV, objects in R2 with the sha256 kept as custom metadata. */
-export class KvR2Storage implements Storage {
-    constructor(private readonly kv: KVNamespace, private readonly bucket: R2Bucket) {}
+export interface StreamedObject extends ObjectInfo {
+    body: ReadableStream<Uint8Array>;
+}
 
-    static fromEnv(env: Env): KvR2Storage {
-        return new KvR2Storage(env.STATE, env.CONTENT);
+/** Cloudflare R2 for everything: strongly consistent, conditional writes, prefix listing; documents live under `docs/`. */
+export class R2Storage implements Storage {
+    constructor(private readonly bucket: R2Bucket) {}
+
+    static fromEnv(env: Env): R2Storage {
+        return new R2Storage(env.CONTENT);
     }
 
-    getDoc<T>(key: string): Promise<T | null> {
-        return this.kv.get<T>(key, "json");
+    async getDoc<T>(key: string): Promise<T | null> {
+        const object = await this.bucket.get(`docs/${key}`);
+        return object ? ((await object.json()) as T) : null;
     }
 
     async putDoc(key: string, value: unknown): Promise<void> {
-        await this.kv.put(key, JSON.stringify(value));
+        await this.bucket.put(`docs/${key}`, JSON.stringify(value), { httpMetadata: { contentType: "application/json" } });
     }
 
-    deleteDoc(key: string): Promise<void> {
-        return this.kv.delete(key);
+    async deleteDoc(key: string): Promise<void> {
+        await this.bucket.delete(`docs/${key}`);
+    }
+
+    async listDocs(prefix: string): Promise<string[]> {
+        const keys: string[] = [];
+        let cursor: string | undefined;
+        do {
+            const page = await this.bucket.list({ prefix: `docs/${prefix}`, ...(cursor && { cursor }) });
+            for (const object of page.objects) keys.push(object.key.slice("docs/".length));
+            cursor = page.truncated ? page.cursor : undefined;
+        } while (cursor);
+        return keys;
     }
 
     async getObject(key: string): Promise<StoredObject | null> {
-        const object = await this.bucket.get(key);
+        const object = await this.bucket.get(`objects/${key}`);
         if (!object) return null;
         const body = new Uint8Array(await object.arrayBuffer());
         return { body, size: body.byteLength, sha256: object.customMetadata?.["sha256"] ?? (await sha256Hex(body)) };
     }
 
-    async headObject(key: string): Promise<ObjectInfo | null> {
-        const object = await this.bucket.head(key);
+    async streamObject(key: string): Promise<StreamedObject | null> {
+        const object = await this.bucket.get(`objects/${key}`);
         if (!object) return null;
         const sha256 = object.customMetadata?.["sha256"];
-        // objects written by this server always carry it; anything else is hashed on demand
+        // objects this server wrote carry their hash; for anything else the bytes have to be read to know it
+        if (!sha256) {
+            const body = new Uint8Array(await object.arrayBuffer());
+            return { body: streamOf(body), size: body.byteLength, sha256: await sha256Hex(body) };
+        }
+        return { body: object.body, size: object.size, sha256 };
+    }
+
+    async headObject(key: string): Promise<ObjectInfo | null> {
+        const object = await this.bucket.head(`objects/${key}`);
+        if (!object) return null;
+        const sha256 = object.customMetadata?.["sha256"];
         if (sha256) return { sha256, size: object.size };
         const stored = await this.getObject(key);
         return stored && { sha256: stored.sha256, size: stored.size };
     }
 
-    async putObject(key: string, body: Uint8Array, sha256: string): Promise<void> {
-        await this.bucket.put(key, body, { customMetadata: { sha256 } });
+    async putObjectIfAbsent(key: string, body: Uint8Array, sha256: string): Promise<boolean> {
+        const written = await this.bucket.put(`objects/${key}`, body as BufferSource, { customMetadata: { sha256 }, onlyIf: { etagDoesNotMatch: "*" } });
+        return written !== null;
     }
 }
 
@@ -79,8 +115,17 @@ export class MemoryStorage implements Storage {
         this.docs.delete(key);
     }
 
+    async listDocs(prefix: string): Promise<string[]> {
+        return [...this.docs.keys()].filter((k) => k.startsWith(prefix)).sort();
+    }
+
     async getObject(key: string): Promise<StoredObject | null> {
         return this.objects.get(key) ?? null;
+    }
+
+    async streamObject(key: string): Promise<StreamedObject | null> {
+        const object = this.objects.get(key);
+        return object ? { body: streamOf(object.body), size: object.size, sha256: object.sha256 } : null;
     }
 
     async headObject(key: string): Promise<ObjectInfo | null> {
@@ -88,9 +133,20 @@ export class MemoryStorage implements Storage {
         return object ? { sha256: object.sha256, size: object.size } : null;
     }
 
-    async putObject(key: string, body: Uint8Array, sha256: string): Promise<void> {
+    async putObjectIfAbsent(key: string, body: Uint8Array, sha256: string): Promise<boolean> {
+        if (this.objects.has(key)) return false;
         this.objects.set(key, { body, size: body.byteLength, sha256 });
+        return true;
     }
+}
+
+function streamOf(bytes: Uint8Array): ReadableStream<Uint8Array> {
+    return new ReadableStream({
+        start(controller) {
+            controller.enqueue(bytes);
+            controller.close();
+        },
+    });
 }
 
 export async function sha256Hex(bytes: Uint8Array): Promise<string> {

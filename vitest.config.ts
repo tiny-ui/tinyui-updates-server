@@ -7,7 +7,6 @@ export default defineConfig({
             wrangler: { configPath: "./wrangler.toml" },
             miniflare: {
                 bindings: { ADMIN_TOKEN: "test-admin-token", MAX_OBJECT_BYTES: "1048576" },
-                kvNamespaces: ["STATE"],
                 r2Buckets: ["CONTENT"],
             },
         }),

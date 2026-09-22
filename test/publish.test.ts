@@ -70,7 +70,8 @@ describe("publishing and delivery", () => {
         const { app, pkg, token } = await setup({ publicKey: p.publicKey });
         await uploadContent(app, pkg, "1", p, token);
 
-        const bad = await request(`/${app}/production/${pkg}/1/current.json`, { method: "PUT", token, json: { version: p.version, signature: p.signature.replace(/A/g, "B") } });
+        const flipped = p.signature.slice(0, 20) + (p.signature[20] === "A" ? "B" : "A") + p.signature.slice(21);
+        const bad = await request(`/${app}/production/${pkg}/1/current.json`, { method: "PUT", token, json: { version: p.version, signature: flipped } });
         expect(bad.status).toBe(400);
         expect(await bad.text()).toContain("signature does not verify");
 
@@ -189,6 +190,26 @@ describe("publishing and delivery", () => {
         const publishedText = await published.text();
         expect(published.status, publishedText).toBe(200);
         expect(await (await request(`/${app}/production/${pkg}/1/current.json`)).json()).toEqual({ version, rollout: 100, signature });
+    });
+
+    it("keeps a version immutable under concurrent uploads, and lists concurrent publishes completely", async () => {
+        const v1 = await signedPackage({ version: "v1", createdAt: "2026-09-22T10:00:00Z" });
+        const key = { publicKey: v1.publicKey, privateKey: v1.privateKey };
+        const v2 = await signedPackage({ version: "v2", createdAt: "2026-09-22T11:00:00Z", key });
+        const { app, pkg, token } = await setup({ publicKey: v1.publicKey });
+
+        // two different bodies race for one path: exactly one wins, the other is told so
+        const race = await Promise.all(["one", "two"].map((body) => request(`/${app}/${pkg}/1/v1/pages/race.bin`, { method: "PUT", token, body })));
+        expect(race.map((r) => r.status).sort()).toEqual([201, 409]);
+
+        await uploadContent(app, pkg, "1", v1, token);
+        await uploadContent(app, pkg, "1", v2, token);
+        // two versions published at once to two channels: each is its own document, nothing is lost
+        const published = await Promise.all([publishPointer(app, "staging", pkg, "1", v1, token), publishPointer(app, "production", pkg, "1", v2, token)]);
+        expect(published.map((r) => r.status)).toEqual([200, 200]);
+        const listed = (await (await request(`/${app}/${pkg}/1/releases`, { token })).json()) as { versions: { version: string }[]; channels: Record<string, { version: string }> };
+        expect(listed.versions.map((v) => v.version)).toEqual(["v2", "v1"]);
+        expect(Object.keys(listed.channels).sort()).toEqual(["production", "staging"]);
     });
 
     it("rejects paths that are not names or segments", async () => {

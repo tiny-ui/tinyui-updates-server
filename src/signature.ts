@@ -1,8 +1,21 @@
 // ECDSA P-256 / SHA-256 over raw bytes: X9.63 public key and DER signature, both base64 (tinyui docs/updates.md §7).
 
-export function isPublicKey(value: string): boolean {
+/** The shape of a key: 65 bytes, `04`-prefixed. Whether it is a point on the curve is [isPublicKey]'s question. */
+export function looksLikePublicKey(value: string): boolean {
     const bytes = fromBase64(value);
     return bytes !== null && bytes.length === 65 && bytes[0] === 0x04;
+}
+
+/** A key WebCrypto accepts as a P-256 public key, i.e. one that can verify anything at all. */
+export async function isPublicKey(value: string): Promise<boolean> {
+    const bytes = fromBase64(value);
+    if (!bytes || bytes.length !== 65 || bytes[0] !== 0x04) return false;
+    try {
+        await crypto.subtle.importKey("raw", bytes as BufferSource, { name: "ECDSA", namedCurve: "P-256" }, false, ["verify"]);
+        return true;
+    } catch {
+        return false;
+    }
 }
 
 /** True when [signature] was made over exactly [data] by the private key of [publicKey]. */

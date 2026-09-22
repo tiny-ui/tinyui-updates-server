@@ -14,9 +14,7 @@ export interface PackageRecord {
     publicKeyUpdatedAt?: string;
 }
 
-/** Everything published under (app, pkg, rv), by version: the pointer for any channel is one of these. */
-export type ReleasesDoc = Record<string, ReleaseRecord>;
-
+/** One published version under (app, pkg, rv): the pointer for any channel names one of these. */
 export interface ReleaseRecord {
     createdAt: string;
     signature: string;
@@ -28,9 +26,4 @@ export interface PointerDoc {
     version: string;
     rollout: number;
     signature: string;
-}
-
-/** Channels that ever had a pointer under (app, pkg, rv), for the releases listing. */
-export interface ChannelsDoc {
-    channels: string[];
 }

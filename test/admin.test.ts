@@ -19,6 +19,9 @@ describe("management endpoints", () => {
 
         expect((await request("/apps/nowhere/packages", { method: "POST", token: ADMIN, json: { name: "shop", publicKey: key.publicKey } })).status).toBe(404);
         expect((await request("/apps/demo/packages", { method: "POST", token: ADMIN, json: { name: "shop", publicKey: "bm90IGEga2V5" } })).status).toBe(400);
+        // well-formed but not a point on the curve: nothing could ever be verified with it
+        const offCurve = btoa(String.fromCharCode(4, ...Array.from({ length: 64 }, (_, i) => i)));
+        expect((await request("/apps/demo/packages", { method: "POST", token: ADMIN, json: { name: "shop", publicKey: offCurve } })).status).toBe(400);
         const pkg = await request("/apps/demo/packages", { method: "POST", token: ADMIN, json: { name: "shop", publicKey: key.publicKey } });
         expect(pkg.status).toBe(201);
         expect((await request("/apps/demo/packages", { method: "POST", token: ADMIN, json: { name: "shop", publicKey: key.publicKey } })).status).toBe(409);
