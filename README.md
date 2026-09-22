@@ -42,16 +42,16 @@ All requests carry `Authorization: Bearer <token>`.
 
 ## Self-hosting
 
-Cloudflare Workers with KV and R2 (the paid plan's lowest tier is enough).
+Cloudflare Workers with one R2 bucket (the paid plan's lowest tier is enough). R2 holds both the package content and the metadata: it is strongly consistent, so a revoked token stops working at once and a published pointer is served at once.
 
-1. Fork or clone. Create a KV namespace and an R2 bucket, put their names into `wrangler.toml`.
+1. Fork or clone. Create an R2 bucket and put its name into `wrangler.toml`.
 2. `npx wrangler secret put ADMIN_TOKEN`
 3. `pnpm install && pnpm deploy`; optionally connect the repo in the Cloudflare dashboard so a push deploys.
 4. `tinyui apps create …`, `tinyui packages create …`, `tinyui tokens create …` against your host, then point each App's `fetch` base at `https://<host>/<app>/<channel>`.
 
-Local run: `pnpm dev` (`.dev.vars` holds `ADMIN_TOKEN`, see `.dev.vars.example`). Tests: `pnpm test` (Workers runtime with KV and R2 emulated).
+Local run: `pnpm dev` (`.dev.vars` holds `ADMIN_TOKEN`, see `.dev.vars.example`). Tests: `pnpm test` (Workers runtime with R2 emulated).
 
-Storage sits behind `src/storage.ts`'s `Storage` interface: `KvR2Storage` for Cloudflare, `MemoryStorage` for tests and other runtimes.
+Storage sits behind `src/storage.ts`'s `Storage` interface: `R2Storage` for Cloudflare, `MemoryStorage` for tests and other runtimes.
 
 ## License
 
