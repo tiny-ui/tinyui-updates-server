@@ -1,0 +1,20 @@
+# Generic template: bind your own KV namespace and R2 bucket, then `wrangler deploy` (README).
+name = "tinyui-updates"
+main = "src/index.ts"
+compatibility_date = "2026-08-22"
+workers_dev = true
+
+[observability]
+enabled = true
+
+[vars]
+# Largest file the publish endpoint accepts, in bytes
+MAX_OBJECT_BYTES = "16777216"
+
+[[kv_namespaces]]
+binding = "STATE"
+id = "replace-with-your-kv-namespace-id"
+
+[[r2_buckets]]
+binding = "CONTENT"
+bucket_name = "tinyui-updates"
