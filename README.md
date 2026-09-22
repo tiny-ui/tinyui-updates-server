@@ -49,6 +49,8 @@ Cloudflare Workers with one R2 bucket (the paid plan's lowest tier is enough). R
 3. `pnpm install && pnpm deploy`; optionally connect the repo in the Cloudflare dashboard so a push deploys.
 4. `tinyui apps create …`, `tinyui packages create …`, `tinyui tokens create …` against your host, then point each App's `fetch` base at `https://<host>/<app>/<channel>`.
 
+The hosted instance deploys with `wrangler deploy --config wrangler.tinyui.toml` (custom domain `updates.tinyui.app`); `wrangler.toml` stays the generic template.
+
 Local run: `pnpm dev` (`.dev.vars` holds `ADMIN_TOKEN`, see `.dev.vars.example`). Tests: `pnpm test` (Workers runtime with R2 emulated).
 
 Storage sits behind `src/storage.ts`'s `Storage` interface: `R2Storage` for Cloudflare, `MemoryStorage` for tests and other runtimes.

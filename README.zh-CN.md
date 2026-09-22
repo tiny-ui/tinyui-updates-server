@@ -49,6 +49,8 @@ Cloudflare Workers + 一个 R2 桶（付费版最低档即可）。包内容与�
 3. `pnpm install && pnpm deploy`；也可在 Cloudflare 后台连上仓库，push 即部署。
 4. 对自己的实例跑 `tinyui apps create …`、`tinyui packages create …`、`tinyui tokens create …`，然后把各 App 的 `fetch` base 指向 `https://<host>/<app>/<channel>`。
 
+托管实例用 `wrangler deploy --config wrangler.tinyui.toml` 部署（自定义域名 `updates.tinyui.app`）；`wrangler.toml` 保持通用模板。
+
 本地运行：`pnpm dev`（`.dev.vars` 放 `ADMIN_TOKEN`，见 `.dev.vars.example`）。测试：`pnpm test`（Workers 运行时，R2 由 miniflare 模拟）。
 
 存储收在 `src/storage.ts` 的 `Storage` 接口后：Cloudflare 用 `R2Storage`，测试与其他运行时用 `MemoryStorage`。
