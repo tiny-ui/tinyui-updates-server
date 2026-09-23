@@ -32,15 +32,31 @@ All requests carry `Authorization: Bearer <token>`.
 
 `tinyui publish` / `tinyui releases …` in `tinyui-cli` are thin clients of these endpoints.
 
-## Management (`ADMIN_TOKEN`)
+## Management
 
-| Request | Meaning |
-|---|---|
-| `POST /apps` `{ id, name, org? }` | create an app (`id` is a path segment; `org` is for billing only) |
-| `POST /apps/<app>/packages` `{ name, publicKey }` | register a package and its verification key |
-| `PUT /apps/<app>/packages/<pkg>/publicKey` | rotate the key |
-| `POST /apps/<app>/packages/<pkg>/tokens` `{ channels }` | issue a publish token limited to channels; returned once, stored as a hash |
-| `DELETE /apps/<app>/packages/<pkg>/tokens/<id>` | revoke |
+An **app** is one host App: paths, host versions, snapshots and permissions hang off it. Its owner for billing (`org`, the tenant) can be renamed or transferred, so it appears in no path and grants nothing; one tenant may own several apps.
+
+Three layers of credentials, each issued by the one above:
+
+| Credential | Reaches | Issued by |
+|---|---|---|
+| the instance's `ADMIN_TOKEN` | every app; the only one that creates apps and issues app tokens | `wrangler secret put` |
+| app token | everything under one app: packages, keys, publish tokens, releases, host snapshots | `ADMIN_TOKEN` |
+| publish token | one package, limited to channels; can read its app's host snapshots | `ADMIN_TOKEN` or an app token of that app |
+
+| Request | Credential | Meaning |
+|---|---|---|
+| `POST /apps` `{ id, name, org? }` | admin | create an app (`id` is a path segment) |
+| `POST /apps/<app>/tokens` | admin | issue an app token; returned once, stored as a hash |
+| `DELETE /apps/<app>/tokens/<id>` | admin | revoke it; an app token cannot mint or revoke app tokens |
+| `POST /apps/<app>/packages` `{ name, publicKey }` | admin or app token | register a package and its verification key |
+| `PUT /apps/<app>/packages/<pkg>/publicKey` | admin or app token | rotate the key |
+| `POST /apps/<app>/packages/<pkg>/tokens` `{ channels }` | admin or app token | issue a publish token limited to channels; returned once, stored as a hash |
+| `DELETE /apps/<app>/packages/<pkg>/tokens/<id>` | admin or app token | revoke |
+| `PUT /apps/<app>/hosts/<hostVersion>` (snapshot bytes) | admin or app token | the host's CI uploads what that host version provides; written once, different bytes → 409 |
+| `GET /apps/<app>/hosts/<hostVersion>` | any token of the app | read it back; `tinyui bundle` checks a package against it before signing |
+
+None of these reach the clients' trust: devices verify with the key embedded in the App.
 
 ## Self-hosting
 

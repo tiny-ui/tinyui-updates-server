@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import type { Context } from "hono";
-import { docKeys, isAdmin, issueToken, packageToken, revokeToken } from "./auth.ts";
+import { anyPackageToken, canManage, docKeys, isAdmin, issueAppToken, issueToken, packageToken, revokeAppToken, revokeToken } from "./auth.ts";
 import { isHostVersion, isName, isObjectPath, isSegment } from "./ids.ts";
 import { parseManifest } from "./manifest.ts";
 import type { AppRecord, PackageRecord, PointerDoc, ReleaseRecord } from "./records.ts";
@@ -19,13 +19,23 @@ export function createApp({ storage, adminToken, maxObjectBytes }: Deps): Hono {
     const app = new Hono();
     const fail = (c: Context, status: 400 | 401 | 403 | 404 | 409 | 413, error: string) => c.json({ error }, status);
     const objectKey = (app: string, pkg: string, hostVersion: string, version: string, path: string) => `${app}/${pkg}/${hostVersion}/${version}/${path}`;
+    // `_` is not allowed in an app id, so these keys never meet a package's content
+    const hostKey = (app: string, hostVersion: string) => `_hosts/${app}/${hostVersion}`;
 
     app.get("/", (c) => c.text("tinyui-updates"));
 
     // ---- management (ADMIN_TOKEN), tinyui docs/updates.md §6.3 ----
 
-    app.use("/apps/*", async (c, next) => (isAdmin(c, adminToken) ? next() : fail(c, 401, "admin token required")));
-    app.post("/apps", async (c, next) => (isAdmin(c, adminToken) ? next() : fail(c, 401, "admin token required")));
+    const admin = async (c: Context, next: () => Promise<void>) => (isAdmin(c, adminToken) ? next() : fail(c, 401, "admin token required"));
+    // everything else under /apps/<app>: the admin token or that app's app token; ids are checked by each route
+    const manager = async (c: Context, next: () => Promise<void>) =>
+        (await canManage(c, storage, adminToken, c.req.param("app") ?? "")) ? next() : fail(c, 401, "the admin token or an app token of this app is required");
+    app.post("/apps", admin);
+    app.post("/apps/:app/tokens", admin);
+    app.delete("/apps/:app/tokens/:tokenId", admin);
+    app.post("/apps/:app/packages", manager);
+    app.on(["POST", "PUT", "DELETE"], "/apps/:app/packages/*", manager);
+    app.put("/apps/:app/hosts/:hostVersion", manager);
 
     app.post("/apps", async (c) => {
         const body = await json(c);
@@ -39,6 +49,43 @@ export function createApp({ storage, adminToken, maxObjectBytes }: Deps): Hono {
         const record: AppRecord = { id, name, createdAt: new Date().toISOString(), ...(org !== undefined && { org }) };
         await storage.putDoc(docKeys.app(id), record);
         return c.json(record, 201);
+    });
+
+    app.post("/apps/:app/tokens", async (c) => {
+        const appId = c.req.param("app");
+        if (!isName(appId) || !(await storage.getDoc(docKeys.app(appId)))) return fail(c, 404, `no app ${appId}`);
+        const { token, record } = await issueAppToken(storage, appId);
+        return c.json({ id: record.id, token, createdAt: record.createdAt }, 201);
+    });
+
+    app.delete("/apps/:app/tokens/:tokenId", async (c) => {
+        const { app: appId, tokenId } = c.req.param();
+        if (!isName(appId) || !(await revokeAppToken(storage, appId, tokenId))) return fail(c, 404, "no such token");
+        return c.body(null, 204);
+    });
+
+    // host snapshots, §6.4: written once per (app, hostVersion) by the host's CI, read back by `tinyui bundle`
+    app.put("/apps/:app/hosts/:hostVersion", async (c) => {
+        const { app: appId, hostVersion } = c.req.param();
+        if (!isName(appId) || !isHostVersion(hostVersion) || !(await storage.getDoc(docKeys.app(appId)))) return fail(c, 404, "not found");
+        const body = await readBounded(c.req.raw.body, maxObjectBytes);
+        if (!body) return fail(c, 413, `snapshots are limited to ${maxObjectBytes} bytes`);
+        if (body.byteLength === 0) return fail(c, 400, "a snapshot cannot be empty");
+        const sha256 = await sha256Hex(body);
+        const key = hostKey(appId, hostVersion);
+        if (await storage.putObjectIfAbsent(key, body, sha256)) return c.json({ hostVersion, sha256, existing: false }, 201);
+        const existing = await storage.headObject(key);
+        if (existing?.sha256 === sha256) return c.json({ hostVersion, sha256, existing: true });
+        return fail(c, 409, `host version ${hostVersion} of ${appId} already has a different snapshot; a shipped host version is frozen`);
+    });
+
+    app.get("/apps/:app/hosts/:hostVersion", async (c) => {
+        const { app: appId, hostVersion } = c.req.param();
+        if (!isName(appId) || !isHostVersion(hostVersion)) return fail(c, 404, "not found");
+        if (!(await canManage(c, storage, adminToken, appId)) && !(await anyPackageToken(c, storage, appId))) return fail(c, 401, "a token of this app is required");
+        const object = await storage.getObject(hostKey(appId, hostVersion));
+        if (!object) return fail(c, 404, `host version ${hostVersion} of ${appId} has no snapshot; upload it from the host's CI`);
+        return c.body(object.body as unknown as ArrayBuffer, 200, { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" });
     });
 
     app.post("/apps/:app/packages", async (c) => {
@@ -89,7 +136,7 @@ export function createApp({ storage, adminToken, maxObjectBytes }: Deps): Hono {
     app.get("/:app/:pkg/:hostVersion/releases", async (c) => {
         const { app: appId, pkg, hostVersion } = c.req.param();
         if (!isName(appId) || !isName(pkg) || !isHostVersion(hostVersion)) return fail(c, 404, "not found");
-        if (!isAdmin(c, adminToken) && !(await packageToken(c, storage, appId, pkg))) return fail(c, 401, "a token for this package is required");
+        if (!(await canManage(c, storage, adminToken, appId)) && !(await packageToken(c, storage, appId, pkg))) return fail(c, 401, "a token for this package is required");
         const releasePrefix = docKeys.releasePrefix(appId, pkg, hostVersion);
         const versions: { version: string; createdAt: string; publishedAt: string }[] = [];
         for (const key of await storage.listDocs(releasePrefix)) {
