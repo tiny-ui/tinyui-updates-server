@@ -15,7 +15,7 @@
 | `<pkg>/<hostVersion>/current.json` | 可变指针：`{ version, rollout, signature }` | `no-store` |
 | `<pkg>/<hostVersion>/<version>/…` | 不可变内容：`manifest.json`、`runtime/*.bin`、`pages/**/*.bin` | `immutable` |
 
-`<hostVersion>` 是宿主 App 为"它给页面提供了什么"（组件、能力、TinyUI 版本）声明的正整数，即 Expo 的 `runtimeVersion` 换了个名字，见 TinyUI 仓的 `docs/updates.md`。
+`<hostVersion>` 是宿主 App 为"它给页面提供了什么"（组件、能力、TinyUI 版本）声明的正整数，作用同 Expo 的 `runtimeVersion`，但取值只能是正整数、数的是宿主的变化，不是 `1.2.0` 这类 App 版本号，见 TinyUI 仓的 `docs/updates.md`。
 
 内容按 `(app, pkg, hostVersion, version)` 存一份；channel 只是指针，staging 验过的版本晋级到 production 只动指针，不重传。
 

@@ -15,7 +15,7 @@ Two kinds of `GET`, relative to `https://<host>/<app>/<channel>`:
 | `<pkg>/<hostVersion>/current.json` | mutable pointer: `{ version, rollout, signature }` | `no-store` |
 | `<pkg>/<hostVersion>/<version>/…` | immutable content: `manifest.json`, `runtime/*.bin`, `pages/**/*.bin` | `immutable` |
 
-`<hostVersion>` is the positive integer a host App declares for what it provides to pages (components, capabilities, the TinyUI version); it is Expo's `runtimeVersion` under another name, see the TinyUI repo's `docs/updates.md`.
+`<hostVersion>` is the positive integer a host App declares for what it provides to pages (components, capabilities, the TinyUI version); it plays the role of Expo's `runtimeVersion` but is always a positive integer that counts host changes, never an App version such as `1.2.0`; see the TinyUI repo's `docs/updates.md`.
 
 Content is stored once per `(app, pkg, hostVersion, version)`; a channel is only a pointer, so promoting a verified version from `staging` to `production` moves the pointer and transfers nothing.
 
