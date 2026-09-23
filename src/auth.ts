@@ -73,8 +73,9 @@ function isAppToken(record: TokenRecord | AppTokenRecord): record is AppTokenRec
 export async function issueAppToken(storage: Storage, app: string): Promise<{ token: string; record: AppTokenRecord }> {
     const { id, token, hash } = await freshToken();
     const record: AppTokenRecord = { kind: "app", id, app, createdAt: new Date().toISOString() };
-    await storage.putDoc(docKeys.tokenByHash(hash), record);
+    // the revocation reference first: if the second write fails, no live token exists that revocation cannot find
     await storage.putDoc(docKeys.appTokenById(app, id), { hash });
+    await storage.putDoc(docKeys.tokenByHash(hash), record);
     return { token, record };
 }
 
@@ -90,8 +91,8 @@ export async function revokeAppToken(storage: Storage, app: string, id: string):
 export async function issueToken(storage: Storage, app: string, pkg: string, channels: string[]): Promise<{ token: string; record: TokenRecord }> {
     const { id, token, hash } = await freshToken();
     const record: TokenRecord = { id, app, pkg, channels, createdAt: new Date().toISOString() };
-    await storage.putDoc(docKeys.tokenByHash(hash), record);
     await storage.putDoc(docKeys.tokenById(app, pkg, id), { hash });
+    await storage.putDoc(docKeys.tokenByHash(hash), record);
     return { token, record };
 }
 
