@@ -224,7 +224,8 @@ describe("publishing and delivery", () => {
         expect((await request(`/${app}/${pkg}/1/../manifest.json`, { method: "PUT", token, body: "x" })).status).not.toBe(201);
         expect((await request(`/${app}/${pkg}/1/v1/..%2Fescape.bin`, { method: "PUT", token, body: "x" })).status).toBe(404);
         expect((await request(`/${app}/Prod/${pkg}/1/current.json`)).status).toBe(404);
-        expect((await request(`/apps/production/${pkg}/1/current.json`)).status).toBe(401);
+        // `apps` is reserved: never served as an app
+        expect((await request(`/apps/production/${pkg}/1/current.json`)).status).toBe(404);
         expect((await request(`/${app}/production/${pkg}/1/current.json`, { method: "PUT", token: ADMIN, json: {} })).status).toBe(401);
     });
 });

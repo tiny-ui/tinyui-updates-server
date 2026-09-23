@@ -32,15 +32,31 @@
 
 `tinyui-cli` 的 `tinyui publish` / `tinyui releases …` 是这些端点的薄封装。
 
-## 管理（`ADMIN_TOKEN`）
+## 管理
 
-| 请求 | 语义 |
-|---|---|
-| `POST /apps` `{ id, name, org? }` | 建 app（`id` 是路径段；`org` 只用于计费归属） |
-| `POST /apps/<app>/packages` `{ name, publicKey }` | 登记包与其验签公钥 |
-| `PUT /apps/<app>/packages/<pkg>/publicKey` | 轮换公钥 |
-| `POST /apps/<app>/packages/<pkg>/tokens` `{ channels }` | 签发限定 channel 的发布 token；只返回一次，服务端只存哈希 |
-| `DELETE /apps/<app>/packages/<pkg>/tokens/<id>` | 吊销 |
+**app** 是一个宿主 App：路径、宿主版本、快照与权限都挂在它上面。它的计费归属（`org`，即租户）可以改名、转让，所以不进路径、不带权限；一个租户可以有多个 app。
+
+凭据三层，下层由上层签发：
+
+| 凭据 | 范围 | 签发者 |
+|---|---|---|
+| 实例的 `ADMIN_TOKEN` | 所有 app；只有它能建 app、签发 app token | `wrangler secret put` |
+| app token | 一个 app 下的一切：包、公钥、发布 token、release、宿主快照 | `ADMIN_TOKEN` |
+| 发布 token | 一个包，限定 channel；可读本 app 的宿主快照 | `ADMIN_TOKEN` 或本 app 的 app token |
+
+| 请求 | 凭据 | 语义 |
+|---|---|---|
+| `POST /apps` `{ id, name, org? }` | admin | 建 app（`id` 是路径段） |
+| `POST /apps/<app>/tokens` | admin | 签发 app token；只返回一次，服务端只存哈希 |
+| `DELETE /apps/<app>/tokens/<id>` | admin | 吊销；app token 不能签发或吊销 app token |
+| `POST /apps/<app>/packages` `{ name, publicKey }` | admin 或 app token | 登记包与其验签公钥 |
+| `PUT /apps/<app>/packages/<pkg>/publicKey` | admin 或 app token | 轮换公钥 |
+| `POST /apps/<app>/packages/<pkg>/tokens` `{ channels }` | admin 或 app token | 签发限定 channel 的发布 token；只返回一次，服务端只存哈希 |
+| `DELETE /apps/<app>/packages/<pkg>/tokens/<id>` | admin 或 app token | 吊销 |
+| `PUT /apps/<app>/hosts/<hostVersion>`（快照字节） | admin 或 app token | 宿主 CI 上传该宿主版本提供了什么；只写一次，不同字节 → 409 |
+| `GET /apps/<app>/hosts/<hostVersion>` | 本 app 的任一 token | 读回；`tinyui bundle` 签名前据此核对包 |
+
+这些都碰不到客户端的信任链：设备只认 App 内置的公钥。
 
 ## 私有化部署
 
