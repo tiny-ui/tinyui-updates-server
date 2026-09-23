@@ -80,15 +80,21 @@ describe("publishing and delivery", () => {
         const imp = await request(`/${app}/production/${pkg}/1/current.json`, { method: "PUT", token, json: { version: impostor.version, signature: impostor.signature } });
         expect(imp.status).toBe(400);
 
-        // a package for another name or runtime version cannot be published under this path
+        // a package for another name or host version cannot be published under this path
         const otherName = await signedPackage({ name: "orders", key: { publicKey: p.publicKey, privateKey: p.privateKey }, version: "v-other" });
         await uploadContent(app, pkg, "1", otherName, token);
         const wrongName = await publishPointer(app, "production", pkg, "1", otherName, token);
         expect(wrongName.status).toBe(400);
         expect(await wrongName.text()).toContain("is not the path package");
-        const otherRv = await signedPackage({ rv: "2", key: { publicKey: p.publicKey, privateKey: p.privateKey }, version: "v-rv2" });
-        await uploadContent(app, pkg, "1", otherRv, token);
-        expect(await (await publishPointer(app, "production", pkg, "1", otherRv, token)).text()).toContain("runtimeVersion");
+        const otherHostVersion = await signedPackage({ hostVersion: "2", key: { publicKey: p.publicKey, privateKey: p.privateKey }, version: "v-hv2" });
+        await uploadContent(app, pkg, "1", otherHostVersion, token);
+        expect(await (await publishPointer(app, "production", pkg, "1", otherHostVersion, token)).text()).toContain("hostVersion");
+
+        // an App version is not a host version: refused in the path and in the signed manifest alike
+        expect((await request(`/${app}/production/${pkg}/1.2.0/current.json`, { method: "PUT", token, json: { version: p.version, signature: p.signature } })).status).toBe(404);
+        const semver = await signedPackage({ hostVersion: "1.2.0", key: { publicKey: p.publicKey, privateKey: p.privateKey }, version: "v-semver" });
+        await uploadContent(app, pkg, "1", semver, token);
+        expect(await (await publishPointer(app, "production", pkg, "1", semver, token)).text()).toContain("not a positive integer");
 
         // the pointer names one version, the manifest says another
         const cross = await request(`/${app}/production/${pkg}/1/current.json`, { method: "PUT", token, json: { version: "v-other", signature: p.signature } });
@@ -144,8 +150,8 @@ describe("publishing and delivery", () => {
 
     it("accepts a package tinyui bundle signed with Node's crypto", async () => {
         // the same fixture the Kotlin client verifies (tinyui updates/src/commonTest Fixture.kt)
-        const publicKey = "BC5lpOHvNqDvlsPmE+3KI2Lbr8fEh1U06S+2op5TSG5jjHvRdzk0DeXhMwsidC+i3V7YyVpwu9+qK/wUqs3hMnE=";
-        const signature = "MEQCIHyi+3Gh1Ocj6vFfGCXLIqB+uHBW9MUGpl9j3ME58IigAiA/G/y10Jb6ytsjG4aDb1clS4mdJBBeyv/f0fzrZ4FVbw==";
+        const publicKey = "BCsQWJxiruNm+rZEwQBeGs/1nTV3QGB2TObvtD61sZlSbBGee/gnfxIWuOMCRUcrCRWGONKylaGqkcRiEq4Qy3g=";
+        const signature = "MEUCIHX9BKQtT7O1VUQCLj7czqmjDjWpSXQa8vcf1dZXBMC6AiEAqtfPgEn72H8PnwD9w3+wKFLe8wd3FnnyckEdtsico5A=";
         const version = "20260922T100000Z-abcdef1";
         const manifest = [
             "{",
@@ -177,7 +183,7 @@ describe("publishing and delivery", () => {
             '    "tinyui-native": "8a65da82b504e482deb6e49382cd8b2abca80b6c6ad67ff82aa642f76c8fcc4d",',
             '    "shop/home": "6ca9202ab8e55afbd5f0e68113ef733655c190b1531cc7e1fc17ea3bb8d32230"',
             "  },",
-            '  "runtimeVersion": "1"',
+            '  "hostVersion": "1"',
             "}",
             "",
         ].join("\n");

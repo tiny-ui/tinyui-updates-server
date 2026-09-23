@@ -12,10 +12,12 @@ Two kinds of `GET`, relative to `https://<host>/<app>/<channel>`:
 
 | Path | Content | Cache |
 |---|---|---|
-| `<pkg>/<rv>/current.json` | mutable pointer: `{ version, rollout, signature }` | `no-store` |
-| `<pkg>/<rv>/<version>/…` | immutable content: `manifest.json`, `runtime/*.bin`, `pages/**/*.bin` | `immutable` |
+| `<pkg>/<hostVersion>/current.json` | mutable pointer: `{ version, rollout, signature }` | `no-store` |
+| `<pkg>/<hostVersion>/<version>/…` | immutable content: `manifest.json`, `runtime/*.bin`, `pages/**/*.bin` | `immutable` |
 
-Content is stored once per `(app, pkg, rv, version)`; a channel is only a pointer, so promoting a verified version from `staging` to `production` moves the pointer and transfers nothing.
+`<hostVersion>` is the positive integer a host App declares for what it provides to pages: it goes up when host components or capabilities change or the embedded TinyUI is upgraded. It is not the version of the TinyUI runtime or the JS engine (the manifest's `engine` / `protocol` cover those); it plays the role of Expo's `runtimeVersion` but is always a positive integer that counts host changes, never an App version such as `1.2.0`; see the TinyUI repo's `docs/updates.md`.
+
+Content is stored once per `(app, pkg, hostVersion, version)`; a channel is only a pointer, so promoting a verified version from `staging` to `production` moves the pointer and transfers nothing.
 
 ## Publishing
 
@@ -23,10 +25,10 @@ All requests carry `Authorization: Bearer <token>`.
 
 | Request | Meaning |
 |---|---|
-| `PUT /<app>/<pkg>/<rv>/<version>/<path>` | upload one file (idempotent; different bytes at an existing path → 409) |
-| `PUT /<app>/<channel>/<pkg>/<rv>/current.json` with `{ version, signature, rollout? }` | publish: verifies the signature over the uploaded `manifest.json` with the registered key, checks `name` / `runtimeVersion` / `version` / `publicKey` and every file's sha256, records the release, moves the pointer |
-| `GET /<app>/<pkg>/<rv>/releases` | published versions and where each channel points |
-| `POST /<app>/<channel>/<pkg>/<rv>/pointer` with `{ version?, rollout? }` | rollback, promotion and rollout changes are the same operation |
+| `PUT /<app>/<pkg>/<hostVersion>/<version>/<path>` | upload one file (idempotent; different bytes at an existing path → 409) |
+| `PUT /<app>/<channel>/<pkg>/<hostVersion>/current.json` with `{ version, signature, rollout? }` | publish: verifies the signature over the uploaded `manifest.json` with the registered key, checks `name` / `hostVersion` / `version` / `publicKey` and every file's sha256, records the release, moves the pointer |
+| `GET /<app>/<pkg>/<hostVersion>/releases` | published versions and where each channel points |
+| `POST /<app>/<channel>/<pkg>/<hostVersion>/pointer` with `{ version?, rollout? }` | rollback, promotion and rollout changes are the same operation |
 
 `tinyui publish` / `tinyui releases …` in `tinyui-cli` are thin clients of these endpoints.
 

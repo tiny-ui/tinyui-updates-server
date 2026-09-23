@@ -12,10 +12,12 @@
 
 | 路径 | 内容 | 缓存 |
 |---|---|---|
-| `<pkg>/<rv>/current.json` | 可变指针：`{ version, rollout, signature }` | `no-store` |
-| `<pkg>/<rv>/<version>/…` | 不可变内容：`manifest.json`、`runtime/*.bin`、`pages/**/*.bin` | `immutable` |
+| `<pkg>/<hostVersion>/current.json` | 可变指针：`{ version, rollout, signature }` | `no-store` |
+| `<pkg>/<hostVersion>/<version>/…` | 不可变内容：`manifest.json`、`runtime/*.bin`、`pages/**/*.bin` | `immutable` |
 
-内容按 `(app, pkg, rv, version)` 存一份；channel 只是指针，staging 验过的版本晋级到 production 只动指针，不重传。
+`<hostVersion>` 是宿主 App 为"它给页面提供了什么"声明的正整数：宿主组件、宿主能力增删或改动，或者升级了内置的 TinyUI，都加 1。它不是 TinyUI 运行时或 JS 引擎的版本（那两者由 manifest 的 `engine` / `protocol` 校验），作用同 Expo 的 `runtimeVersion`，但取值只能是正整数、数的是宿主的变化，不是 `1.2.0` 这类 App 版本号，见 TinyUI 仓的 `docs/updates.md`。
+
+内容按 `(app, pkg, hostVersion, version)` 存一份；channel 只是指针，staging 验过的版本晋级到 production 只动指针，不重传。
 
 ## 发布
 
@@ -23,10 +25,10 @@
 
 | 请求 | 语义 |
 |---|---|
-| `PUT /<app>/<pkg>/<rv>/<version>/<path>` | 上传一个文件（幂等；同路径不同内容 → 409） |
-| `PUT /<app>/<channel>/<pkg>/<rv>/current.json`，body `{ version, signature, rollout? }` | 发布：用登记的公钥对已上传的 `manifest.json` 原始字节验签，核对 `name` / `runtimeVersion` / `version` / `publicKey` 与每个文件的 sha256，记录 release，切指针 |
-| `GET /<app>/<pkg>/<rv>/releases` | 已发布的版本与各 channel 的指针 |
-| `POST /<app>/<channel>/<pkg>/<rv>/pointer`，body `{ version?, rollout? }` | 回滚、晋级、改灰度是同一个操作 |
+| `PUT /<app>/<pkg>/<hostVersion>/<version>/<path>` | 上传一个文件（幂等；同路径不同内容 → 409） |
+| `PUT /<app>/<channel>/<pkg>/<hostVersion>/current.json`，body `{ version, signature, rollout? }` | 发布：用登记的公钥对已上传的 `manifest.json` 原始字节验签，核对 `name` / `hostVersion` / `version` / `publicKey` 与每个文件的 sha256，记录 release，切指针 |
+| `GET /<app>/<pkg>/<hostVersion>/releases` | 已发布的版本与各 channel 的指针 |
+| `POST /<app>/<channel>/<pkg>/<hostVersion>/pointer`，body `{ version?, rollout? }` | 回滚、晋级、改灰度是同一个操作 |
 
 `tinyui-cli` 的 `tinyui publish` / `tinyui releases …` 是这些端点的薄封装。
 

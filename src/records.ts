@@ -14,7 +14,7 @@ export interface PackageRecord {
     publicKeyUpdatedAt?: string;
 }
 
-/** One published version under (app, pkg, rv): the pointer for any channel names one of these. */
+/** One published version under (app, pkg, hostVersion): the pointer for any channel names one of these. */
 export interface ReleaseRecord {
     createdAt: string;
     signature: string;
