@@ -3,7 +3,12 @@ export function isName(value: string): boolean {
     return /^[a-z0-9-]+$/.test(value) && !RESERVED.has(value);
 }
 
-/** `runtimeVersion` and `version`: one path segment, never `.` or `..`. */
+/** A host version: a positive integer, so an App version such as `1.2.0` cannot be mistaken for one. */
+export function isHostVersion(value: string): boolean {
+    return /^[1-9][0-9]*$/.test(value);
+}
+
+/** `version`: one path segment, never `.` or `..`. */
 export function isSegment(value: string): boolean {
     return /^[A-Za-z0-9._-]+$/.test(value) && value !== "." && value !== "..";
 }

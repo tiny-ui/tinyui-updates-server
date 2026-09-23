@@ -20,7 +20,7 @@ export async function newKeyPair(): Promise<{ publicKey: string; privateKey: Cry
 
 export async function signedPackage(options: {
     name?: string;
-    rv?: string;
+    hostVersion?: string;
     version?: string;
     createdAt?: string;
     key?: { publicKey: string; privateKey: CryptoKey };
@@ -48,7 +48,7 @@ export async function signedPackage(options: {
         engine: "e".repeat(40),
         protocol: 1,
         hashes,
-        runtimeVersion: options.rv ?? "1",
+        hostVersion: options.hostVersion ?? "1",
     };
     options.edit?.(manifest);
     const bytes = new TextEncoder().encode(JSON.stringify(manifest, null, 2) + "\n");
@@ -108,15 +108,15 @@ export async function setup(options: { app?: string; pkg?: string; channels?: st
 }
 
 /** Uploads every file and the manifest, i.e. what `tinyui publish` does before writing the pointer. */
-export async function uploadContent(app: string, pkg: string, rv: string, p: SignedPackage, token: string): Promise<void> {
+export async function uploadContent(app: string, pkg: string, hostVersion: string, p: SignedPackage, token: string): Promise<void> {
     for (const [path, bytes] of Object.entries(p.files)) {
-        const r = await request(`/${app}/${pkg}/${rv}/${p.version}/${path}`, { method: "PUT", token, body: bytes as BodyInit });
+        const r = await request(`/${app}/${pkg}/${hostVersion}/${p.version}/${path}`, { method: "PUT", token, body: bytes as BodyInit });
         if (r.status !== 201 && r.status !== 200) throw new Error(`${path}: ${r.status} ${await r.text()}`);
     }
-    const m = await request(`/${app}/${pkg}/${rv}/${p.version}/manifest.json`, { method: "PUT", token, body: p.manifest as BodyInit });
+    const m = await request(`/${app}/${pkg}/${hostVersion}/${p.version}/manifest.json`, { method: "PUT", token, body: p.manifest as BodyInit });
     if (m.status !== 201 && m.status !== 200) throw new Error(`manifest: ${m.status} ${await m.text()}`);
 }
 
-export function publishPointer(app: string, channel: string, pkg: string, rv: string, p: SignedPackage, token: string, rollout?: number): Promise<Response> {
-    return request(`/${app}/${channel}/${pkg}/${rv}/current.json`, { method: "PUT", token, json: { version: p.version, signature: p.signature, ...(rollout !== undefined && { rollout }) } });
+export function publishPointer(app: string, channel: string, pkg: string, hostVersion: string, p: SignedPackage, token: string, rollout?: number): Promise<Response> {
+    return request(`/${app}/${channel}/${pkg}/${hostVersion}/current.json`, { method: "PUT", token, json: { version: p.version, signature: p.signature, ...(rollout !== undefined && { rollout }) } });
 }

@@ -1,4 +1,4 @@
-import { isName, isObjectPath, isSegment } from "./ids.ts";
+import { isHostVersion, isName, isObjectPath, isSegment } from "./ids.ts";
 import { looksLikePublicKey } from "./signature.ts";
 
 /** The signed `<version>/manifest.json` `tinyui bundle` wrote (tinyui docs/updates.md §1.1), the fields this server checks. */
@@ -11,7 +11,7 @@ export interface Manifest {
     publicKey: string;
     version: string;
     createdAt: string;
-    runtimeVersion: string;
+    hostVersion: string;
 }
 
 /** Throws with a message naming the first field that is not what a bundle carries. */
@@ -48,11 +48,11 @@ export function parseManifest(text: string): Manifest {
         publicKey: string("publicKey"),
         version: string("version"),
         createdAt: string("createdAt"),
-        runtimeVersion: string("runtimeVersion"),
+        hostVersion: string("hostVersion"),
     };
     if (!isName(manifest.name)) throw new Error("manifest.json name is not a package name");
     if (!isSegment(manifest.version)) throw new Error("manifest.json version is not a path segment");
-    if (!isSegment(manifest.runtimeVersion)) throw new Error("manifest.json runtimeVersion is not a path segment");
+    if (!isHostVersion(manifest.hostVersion)) throw new Error("manifest.json hostVersion is not a positive integer");
     if (!looksLikePublicKey(manifest.publicKey)) throw new Error("manifest.json publicKey is not a P-256 point");
     const modules = [...manifest.runtime, ...manifest.pages];
     if (new Set(modules).size !== modules.length) throw new Error("manifest.json lists a module twice");
