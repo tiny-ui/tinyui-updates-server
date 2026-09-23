@@ -105,7 +105,8 @@ export async function revokeToken(storage: Storage, app: string, pkg: string, id
 }
 
 async function freshToken(): Promise<{ id: string; token: string; hash: string }> {
-    const id = hex(crypto.getRandomValues(new Uint8Array(6)));
+    // 128 bits: two live tokens sharing an id would leave the first one without a revocation reference
+    const id = hex(crypto.getRandomValues(new Uint8Array(16)));
     const token = `${id}.${base64url(crypto.getRandomValues(new Uint8Array(32)))}`;
     return { id, token, hash: await sha256Hex(token) };
 }
