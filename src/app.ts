@@ -320,7 +320,7 @@ function parseRollout(value: unknown, fallback: number): number | null {
 async function movesBack(storage: Storage, app: string, pkg: string, hostVersion: string, current: PointerDoc | null, version: string, createdAt: string): Promise<string | null> {
     if (!current || current.version === version) return null;
     const at = await storage.getDoc<ReleaseRecord>(docKeys.release(app, pkg, hostVersion, current.version));
-    if (!at) return null;
+    if (!at) return `the channel points at ${current.version}, which has no release record; refusing to move it`;
     const from = instant(at.createdAt);
     const to = instant(createdAt);
     if (from !== null && to !== null && to > from) return null;
