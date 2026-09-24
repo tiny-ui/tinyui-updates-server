@@ -53,6 +53,8 @@ export function parseManifest(text: string): Manifest {
     if (!isName(manifest.name)) throw new Error("manifest.json name is not a package name");
     if (!isSegment(manifest.version)) throw new Error("manifest.json version is not a path segment");
     if (!isHostVersion(manifest.hostVersion)) throw new Error("manifest.json hostVersion is not a positive integer");
+    // one fixed form, so comparing the strings is comparing the instants (pointers only move forward)
+    if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(manifest.createdAt)) throw new Error("manifest.json createdAt is not YYYY-MM-DDTHH:MM:SSZ");
     if (!looksLikePublicKey(manifest.publicKey)) throw new Error("manifest.json publicKey is not a P-256 point");
     const modules = [...manifest.runtime, ...manifest.pages];
     if (new Set(modules).size !== modules.length) throw new Error("manifest.json lists a module twice");

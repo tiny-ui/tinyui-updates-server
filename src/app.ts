@@ -160,7 +160,9 @@ export function createApp({ storage, adminToken, maxObjectBytes }: Deps): Hono {
         if (!token) return fail(c, 401, "a token for this package is required");
         if (!token.channels.includes(channel)) return fail(c, 403, `token is not allowed to publish to ${channel}`);
         const body = await json(c);
-        const current = await storage.getDoc<PointerDoc>(docKeys.pointer(appId, pkg, hostVersion, channel));
+        const pointerKey = docKeys.pointer(appId, pkg, hostVersion, channel);
+        const at = await storage.getDocRevision<PointerDoc>(pointerKey);
+        const current = at?.value ?? null;
         const version = body?.["version"] ?? current?.version;
         if (typeof version !== "string" || !isSegment(version)) return fail(c, 400, "version is required");
         const release = await storage.getDoc<ReleaseRecord>(docKeys.release(appId, pkg, hostVersion, version));
@@ -170,7 +172,7 @@ export function createApp({ storage, adminToken, maxObjectBytes }: Deps): Hono {
         const backwards = await movesBack(storage, appId, pkg, hostVersion, current, version, release.createdAt);
         if (backwards) return fail(c, 409, backwards);
         const pointer: PointerDoc = { version, rollout, signature: release.signature };
-        await storage.putDoc(docKeys.pointer(appId, pkg, hostVersion, channel), pointer);
+        if (!(await storage.putDocIf(pointerKey, pointer, at?.revision ?? null))) return fail(c, 409, MOVED_MEANWHILE);
         return c.json(pointer);
     });
 
@@ -213,7 +215,9 @@ export function createApp({ storage, adminToken, maxObjectBytes }: Deps): Hono {
             if (info.sha256 !== manifest.hashes[module]) return fail(c, 409, `${version}/${path} does not match manifest.hashes`);
         }
 
-        const current = await storage.getDoc<PointerDoc>(docKeys.pointer(appId, pkg, hostVersion, channel));
+        const pointerKey = docKeys.pointer(appId, pkg, hostVersion, channel);
+        const at = await storage.getDocRevision<PointerDoc>(pointerKey);
+        const current = at?.value ?? null;
         const backwards = await movesBack(storage, appId, pkg, hostVersion, current, version, manifest.createdAt);
         if (backwards) return fail(c, 409, backwards);
         const releaseKey = docKeys.release(appId, pkg, hostVersion, version);
@@ -221,7 +225,7 @@ export function createApp({ storage, adminToken, maxObjectBytes }: Deps): Hono {
         const release: ReleaseRecord = { createdAt: manifest.createdAt, signature, publishedAt: existing?.publishedAt ?? new Date().toISOString() };
         await storage.putDoc(releaseKey, release);
         const pointer: PointerDoc = { version, rollout, signature };
-        await storage.putDoc(docKeys.pointer(appId, pkg, hostVersion, channel), pointer);
+        if (!(await storage.putDocIf(pointerKey, pointer, at?.revision ?? null))) return fail(c, 409, MOVED_MEANWHILE);
         return c.json(pointer);
     });
 
@@ -319,3 +323,6 @@ async function movesBack(storage: Storage, app: string, pkg: string, hostVersion
     if (!at || createdAt > at.createdAt) return null;
     return `the channel is at ${current.version} (${at.createdAt}); ${version} (${createdAt}) is not newer. Pointers only move forward: publish the old content as a new version`;
 }
+
+/** The pointer changed between the forward-only check and the write: another publish or promotion won. */
+const MOVED_MEANWHILE = "the channel pointer changed meanwhile; look at it again and retry";

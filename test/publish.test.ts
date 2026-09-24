@@ -151,6 +151,33 @@ describe("publishing and delivery", () => {
         expect(listed.channels).toEqual({ staging: { version: "v2", rollout: 100 }, production: { version: "v2", rollout: 100 } });
     });
 
+    it("never leaves a pointer behind a published version, even when publishes race", async () => {
+        const v1 = await signedPackage({ version: "r1", createdAt: "2026-09-22T10:00:00Z" });
+        const key = { publicKey: v1.publicKey, privateKey: v1.privateKey };
+        const v2 = await signedPackage({ version: "r2", createdAt: "2026-09-22T11:00:00Z", key });
+        const v3 = await signedPackage({ version: "r3", createdAt: "2026-09-22T12:00:00Z", key });
+        const { app, pkg, token } = await setup({ publicKey: v1.publicKey });
+        for (const p of [v1, v2, v3]) await uploadContent(app, pkg, "1", p, token);
+        expect((await publishPointer(app, "staging", pkg, "1", v1, token)).status).toBe(200);
+
+        const [r2, r3] = await Promise.all([publishPointer(app, "staging", pkg, "1", v2, token), publishPointer(app, "staging", pkg, "1", v3, token)]);
+        const landed = (await (await request(`/${app}/staging/${pkg}/1/current.json`)).json()) as { version: string };
+        const accepted = [r2.status === 200 && "r2", r3.status === 200 && "r3"].filter(Boolean) as string[];
+        expect(accepted.length).toBeGreaterThan(0);
+        // whatever raced, the pointer is at the newest version any request was told it published
+        expect(landed.version).toBe(accepted.sort().at(-1));
+        for (const r of [r2, r3]) expect([200, 409]).toContain(r.status);
+    });
+
+    it("refuses a createdAt that does not sort as it reads", async () => {
+        const p = await signedPackage({ createdAt: "2026-09-22T10:00:00.500Z" });
+        const { app, pkg, token } = await setup({ publicKey: p.publicKey });
+        await uploadContent(app, pkg, "1", p, token);
+        const response = await publishPointer(app, "staging", pkg, "1", p, token);
+        expect(response.status).toBe(400);
+        expect(await response.text()).toContain("createdAt is not YYYY-MM-DDTHH:MM:SSZ");
+    });
+
     it("accepts a package tinyui bundle signed with Node's crypto", async () => {
         // the same fixture the Kotlin client verifies (tinyui updates/src/commonTest Fixture.kt)
         const publicKey = "BCsQWJxiruNm+rZEwQBeGs/1nTV3QGB2TObvtD61sZlSbBGee/gnfxIWuOMCRUcrCRWGONKylaGqkcRiEq4Qy3g=";

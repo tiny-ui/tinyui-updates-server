@@ -8,6 +8,10 @@ import type { Env } from "./env.ts";
 export interface Storage {
     getDoc<T>(key: string): Promise<T | null>;
     putDoc(key: string, value: unknown): Promise<void>;
+    /** A document with the revision [putDocIf] compares against. */
+    getDocRevision<T>(key: string): Promise<{ value: T; revision: string } | null>;
+    /** Writes only while the document is still at [revision] (null: still absent); false when it moved meanwhile. */
+    putDocIf(key: string, value: unknown, revision: string | null): Promise<boolean>;
     deleteDoc(key: string): Promise<void>;
     /** Keys starting with [prefix]. */
     listDocs(prefix: string): Promise<string[]>;
@@ -46,6 +50,17 @@ export class R2Storage implements Storage {
 
     async putDoc(key: string, value: unknown): Promise<void> {
         await this.bucket.put(`docs/${key}`, JSON.stringify(value), { httpMetadata: { contentType: "application/json" } });
+    }
+
+    async getDocRevision<T>(key: string): Promise<{ value: T; revision: string } | null> {
+        const object = await this.bucket.get(`docs/${key}`);
+        return object ? { value: (await object.json()) as T, revision: object.etag } : null;
+    }
+
+    async putDocIf(key: string, value: unknown, revision: string | null): Promise<boolean> {
+        const onlyIf = revision === null ? { etagDoesNotMatch: "*" } : { etagMatches: revision };
+        const written = await this.bucket.put(`docs/${key}`, JSON.stringify(value), { httpMetadata: { contentType: "application/json" }, onlyIf });
+        return written !== null;
     }
 
     async deleteDoc(key: string): Promise<void> {
@@ -100,6 +115,7 @@ export class R2Storage implements Storage {
 /** In-process storage for tests and for running the app outside Cloudflare. */
 export class MemoryStorage implements Storage {
     private readonly docs = new Map<string, string>();
+    private readonly revisions = new Map<string, number>();
     private readonly objects = new Map<string, StoredObject>();
 
     async getDoc<T>(key: string): Promise<T | null> {
@@ -109,6 +125,19 @@ export class MemoryStorage implements Storage {
 
     async putDoc(key: string, value: unknown): Promise<void> {
         this.docs.set(key, JSON.stringify(value));
+        this.revisions.set(key, (this.revisions.get(key) ?? 0) + 1);
+    }
+
+    async getDocRevision<T>(key: string): Promise<{ value: T; revision: string } | null> {
+        const value = this.docs.get(key);
+        return value === undefined ? null : { value: JSON.parse(value) as T, revision: String(this.revisions.get(key)) };
+    }
+
+    async putDocIf(key: string, value: unknown, revision: string | null): Promise<boolean> {
+        const at = this.docs.has(key) ? String(this.revisions.get(key)) : null;
+        if (at !== revision) return false;
+        await this.putDoc(key, value);
+        return true;
     }
 
     async deleteDoc(key: string): Promise<void> {
