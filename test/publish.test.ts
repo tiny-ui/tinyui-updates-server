@@ -22,10 +22,10 @@ describe("publishing and delivery", () => {
         expect(manifest.status).toBe(200);
         expect(manifest.headers.get("cache-control")).toBe("public, max-age=31536000, immutable");
         expect(new Uint8Array(await manifest.arrayBuffer())).toEqual(p.manifest);
-        const core = await request(`/${app}/production/${pkg}/1/${p.version}/runtime/core.bin`);
-        expect(new TextDecoder().decode(await core.arrayBuffer())).toBe(`CORE-${p.version}`);
+        const home = await request(`/${app}/production/${pkg}/1/${p.version}/pages/home.bin`);
+        expect(new TextDecoder().decode(await home.arrayBuffer())).toBe(`HOME-${p.version}`);
         // the channel is a pointer, not a place: another channel reads the same bytes even before it points there
-        expect((await request(`/${app}/staging/${pkg}/1/${p.version}/runtime/core.bin`)).status).toBe(200);
+        expect((await request(`/${app}/staging/${pkg}/1/${p.version}/pages/home.bin`)).status).toBe(200);
         expect((await request(`/${app}/staging/${pkg}/1/current.json`)).status).toBe(404);
     });
 
@@ -39,9 +39,9 @@ describe("publishing and delivery", () => {
         await request(`/${app}/${pkg}/1/${p.version}/manifest.json`, { method: "PUT", token, body: p.manifest as BodyInit });
         const missing = await publishPointer(app, "production", pkg, "1", p, token);
         expect(missing.status).toBe(409);
-        expect(await missing.text()).toContain("runtime/core.bin is not uploaded yet");
+        expect(await missing.text()).toContain("pages/home.bin is not uploaded yet");
 
-        const tampered = await signedPackage({ files: { "runtime/core.bin": "CORE-x", "runtime/native.bin": "NATIVE-x", "pages/home.bin": "HOME-x" }, key: { publicKey: p.publicKey, privateKey: p.privateKey } });
+        const tampered = await signedPackage({ files: { "pages/home.bin": "HOME-x" }, key: { publicKey: p.publicKey, privateKey: p.privateKey } });
         for (const [path, bytes] of Object.entries(tampered.files)) {
             await request(`/${app}/${pkg}/1/${p.version}/${path}`, { method: "PUT", token, body: bytes as BodyInit });
         }
@@ -184,26 +184,18 @@ describe("publishing and delivery", () => {
 
     it("accepts a package tinyui bundle signed with Node's crypto", async () => {
         // the same fixture the Kotlin client verifies (tinyui updates/src/commonTest Fixture.kt)
-        const publicKey = "BCsQWJxiruNm+rZEwQBeGs/1nTV3QGB2TObvtD61sZlSbBGee/gnfxIWuOMCRUcrCRWGONKylaGqkcRiEq4Qy3g=";
-        const signature = "MEUCIHX9BKQtT7O1VUQCLj7czqmjDjWpSXQa8vcf1dZXBMC6AiEAqtfPgEn72H8PnwD9w3+wKFLe8wd3FnnyckEdtsico5A=";
+        const publicKey = "BEbccwd4v7RnidrsHeZ6qqJF+yNy4DTEe/JHkHL470V74M9sYGxpekukLlpXv2qrru7ptyfKS1c7eC26sn7wKdI=";
+        const signature = "MEUCIQCFnOw6pTRT9OYOsp/tdMzCD9DB8SnFmjop2KssJl0QEwIgXr0EWLdYlxagsjCVFwz0GTP5UZBlI0U1pGcQMWzOjuw=";
         const version = "20260922T100000Z-abcdef1";
         const manifest = [
             "{",
-            '  "runtime": [',
-            '    "tinyui-core",',
-            '    "tinyui-native"',
-            "  ],",
             '  "pages": [',
             '    "shop/home"',
             "  ],",
             '  "files": {',
-            '    "tinyui-core": "runtime/core",',
-            '    "tinyui-native": "runtime/native",',
             '    "shop/home": "pages/home"',
             "  },",
             '  "buildIds": {',
-            '    "tinyui-core": "aaaaaaaa",',
-            '    "tinyui-native": "bbbbbbbb",',
             '    "shop/home": "cccccccc"',
             "  },",
             '  "name": "shop",',
@@ -211,10 +203,8 @@ describe("publishing and delivery", () => {
             `  "version": "${version}",`,
             '  "createdAt": "2026-09-22T10:00:00Z",',
             '  "engine": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",',
-            '  "protocol": 1,',
+            '  "tinyui": "0.5.0",',
             '  "hashes": {',
-            '    "tinyui-core": "d63180d8a590da5a74a6a62a700b4f1c1ccf8eb1286e0509e6b30fc72d92697b",',
-            '    "tinyui-native": "8a65da82b504e482deb6e49382cd8b2abca80b6c6ad67ff82aa642f76c8fcc4d",',
             '    "shop/home": "6ca9202ab8e55afbd5f0e68113ef733655c190b1531cc7e1fc17ea3bb8d32230"',
             "  },",
             '  "hostVersion": "1"',
@@ -222,7 +212,7 @@ describe("publishing and delivery", () => {
             "",
         ].join("\n");
         const { app, pkg, token } = await setup({ publicKey });
-        for (const [path, text] of Object.entries({ "runtime/core.bin": "CORE2", "runtime/native.bin": "NATIVE2", "pages/home.bin": "HOME2" })) {
+        for (const [path, text] of Object.entries({ "pages/home.bin": "HOME2" })) {
             expect((await request(`/${app}/${pkg}/1/${version}/${path}`, { method: "PUT", token, body: text })).status).toBe(201);
         }
         expect((await request(`/${app}/${pkg}/1/${version}/manifest.json`, { method: "PUT", token, body: manifest })).status).toBe(201);

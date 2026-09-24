@@ -208,7 +208,7 @@ export function createApp({ storage, adminToken, maxObjectBytes }: Deps): Hono {
         if (manifest.hostVersion !== hostVersion) return fail(c, 400, `manifest hostVersion ${manifest.hostVersion} is not the path host version ${hostVersion}`);
         if (manifest.version !== version) return fail(c, 400, `manifest version ${manifest.version} is not the pointer version ${version}`);
         if (manifest.publicKey !== registered.publicKey) return fail(c, 400, "manifest publicKey is not the registered one");
-        for (const module of [...manifest.runtime, ...manifest.pages]) {
+        for (const module of manifest.pages) {
             const path = manifest.files[module] + ".bin";
             const info = await storage.headObject(objectKey(appId, pkg, hostVersion, version, path));
             if (!info) return fail(c, 409, `${version}/${path} is not uploaded yet`);

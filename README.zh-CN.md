@@ -13,9 +13,9 @@
 | 路径 | 内容 | 缓存 |
 |---|---|---|
 | `<pkg>/<hostVersion>/current.json` | 可变指针：`{ version, rollout, signature }` | `no-store` |
-| `<pkg>/<hostVersion>/<version>/…` | 不可变内容：`manifest.json`、`runtime/*.bin`、`pages/**/*.bin` | `immutable` |
+| `<pkg>/<hostVersion>/<version>/…` | 不可变内容：`manifest.json`、`pages/**/*.bin`（运行时随 App，不在包里） | `immutable` |
 
-`<hostVersion>` 是宿主 App 为"它给页面提供了什么"声明的正整数：宿主组件、宿主能力增删或改动，或者升级了内置的 TinyUI，都加 1。它不是 TinyUI 运行时或 JS 引擎的版本（那两者由 manifest 的 `engine` / `protocol` 校验），作用同 Expo 的 `runtimeVersion`，但取值只能是正整数、数的是宿主的变化，不是 `1.2.0` 这类 App 版本号，见 TinyUI 仓的 `docs/updates.md`。
+`<hostVersion>` 是宿主 App 为"它对页面承诺了什么"声明的正整数：宿主组件、宿主能力增删或改动，页面要用更新的 TinyUI 运行时，或者换了 JS 引擎，都加 1。它不是 TinyUI 版本：单纯升级 TinyUI 不动它，manifest 的 `engine` / `tinyui` 另行校验，作用同 Expo 的 `runtimeVersion`，但取值只能是正整数、数的是宿主的变化，不是 `1.2.0` 这类 App 版本号，见 TinyUI 仓的 `docs/updates.md`。
 
 内容按 `(app, pkg, hostVersion, version)` 存一份；channel 只是指针，staging 验过的版本晋级到 production 只动指针，不重传。
 

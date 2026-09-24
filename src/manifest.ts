@@ -3,7 +3,6 @@ import { looksLikePublicKey } from "./signature.ts";
 
 /** The signed `<version>/manifest.json` `tinyui bundle` wrote (tinyui docs/updates.md §1.1), the fields this server checks. */
 export interface Manifest {
-    runtime: string[];
     pages: string[];
     files: Record<string, string>;
     hashes: Record<string, string>;
@@ -24,7 +23,7 @@ export function parseManifest(text: string): Manifest {
     }
     if (typeof raw !== "object" || raw === null) throw new Error("manifest.json is not an object");
     const m = raw as Record<string, unknown>;
-    const names = (key: "runtime" | "pages"): string[] => {
+    const names = (key: "pages"): string[] => {
         const list = m[key];
         if (!Array.isArray(list) || !list.every((x) => typeof x === "string")) throw new Error(`manifest.json ${key} must list module names`);
         return list as string[];
@@ -40,7 +39,6 @@ export function parseManifest(text: string): Manifest {
         return value;
     };
     const manifest: Manifest = {
-        runtime: names("runtime"),
         pages: names("pages"),
         files: table("files"),
         hashes: table("hashes"),
@@ -55,11 +53,11 @@ export function parseManifest(text: string): Manifest {
     if (!isHostVersion(manifest.hostVersion)) throw new Error("manifest.json hostVersion is not a positive integer");
     if (instant(manifest.createdAt) === null) throw new Error("manifest.json createdAt is not a real YYYY-MM-DDTHH:MM:SSZ instant");
     if (!looksLikePublicKey(manifest.publicKey)) throw new Error("manifest.json publicKey is not a P-256 point");
-    const modules = [...manifest.runtime, ...manifest.pages];
+    const modules = manifest.pages;
     if (new Set(modules).size !== modules.length) throw new Error("manifest.json lists a module twice");
     for (const key of ["files", "hashes"] as const) {
         const keys = Object.keys(manifest[key]).sort();
-        if (keys.join("\n") !== [...modules].sort().join("\n")) throw new Error(`manifest.json ${key} does not cover exactly the modules in runtime and pages`);
+        if (keys.join("\n") !== [...modules].sort().join("\n")) throw new Error(`manifest.json ${key} does not cover exactly the modules in pages`);
     }
     for (const path of Object.values(manifest.files)) {
         if (!isObjectPath(path + ".bin")) throw new Error(`manifest.json files entry ${path} is not a file path`);

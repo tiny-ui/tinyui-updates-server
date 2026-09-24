@@ -31,13 +31,12 @@ export async function signedPackage(options: {
     const name = options.name ?? "shop";
     const version = options.version ?? "20260922T100000Z-abcdef1";
     const key = options.key ?? (await newKeyPair());
-    const contents = options.files ?? { "runtime/core.bin": `CORE-${version}`, "runtime/native.bin": `NATIVE-${version}`, "pages/home.bin": `HOME-${version}` };
+    const contents = options.files ?? { "pages/home.bin": `HOME-${version}` };
     const files = Object.fromEntries(Object.entries(contents).map(([p, text]) => [p, new TextEncoder().encode(text)]));
-    const modules: Record<string, string> = { "tinyui-core": "runtime/core", "tinyui-native": "runtime/native", [`${name}/home`]: "pages/home" };
+    const modules: Record<string, string> = { [`${name}/home`]: "pages/home" };
     const hashes: Record<string, string> = {};
     for (const [module, path] of Object.entries(modules)) hashes[module] = await sha256Hex(files[`${path}.bin`]!);
     const manifest: Record<string, unknown> = {
-        runtime: ["tinyui-core", "tinyui-native"],
         pages: [`${name}/home`],
         files: modules,
         buildIds: Object.fromEntries(Object.keys(modules).map((m) => [m, "00000000"])),
@@ -46,7 +45,7 @@ export async function signedPackage(options: {
         version,
         createdAt: options.createdAt ?? "2026-09-22T10:00:00Z",
         engine: "e".repeat(40),
-        protocol: 1,
+        tinyui: "0.7.0",
         hashes,
         hostVersion: options.hostVersion ?? "1",
     };
