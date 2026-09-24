@@ -13,7 +13,7 @@ export function isSegment(value: string): boolean {
     return /^[A-Za-z0-9._-]+$/.test(value) && value !== "." && value !== "..";
 }
 
-/** A file path inside a version directory: `runtime/core.bin`, `pages/home.bin`, `manifest.json`. */
+/** A file path inside a version directory: `pages/home.bin`, `manifest.json`. */
 export function isObjectPath(value: string): boolean {
     const segments = value.split("/");
     return segments.length > 0 && segments.every(isSegment);
