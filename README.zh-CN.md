@@ -28,7 +28,7 @@
 | `PUT /<app>/<pkg>/<hostVersion>/<version>/<path>` | 上传一个文件（幂等；同路径不同内容 → 409） |
 | `PUT /<app>/<channel>/<pkg>/<hostVersion>/current.json`，body `{ version, signature, rollout? }` | 发布：用登记的公钥对已上传的 `manifest.json` 原始字节验签，核对 `name` / `hostVersion` / `version` / `publicKey` 与每个文件的 sha256，记录 release，切指针 |
 | `GET /<app>/<pkg>/<hostVersion>/releases` | 已发布的版本与各 channel 的指针 |
-| `POST /<app>/<channel>/<pkg>/<hostVersion>/pointer`，body `{ version?, rollout? }` | 回滚、晋级、改灰度是同一个操作 |
+| `POST /<app>/<channel>/<pkg>/<hostVersion>/pointer`，body `{ version?, rollout? }` | 晋级、改灰度；指针只往更新的版本走（回滚是用旧内容发一个新版本），否则 409 |
 
 `tinyui-cli` 的 `tinyui publish` / `tinyui releases …` 是这些端点的薄封装。
 

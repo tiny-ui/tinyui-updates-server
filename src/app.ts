@@ -167,6 +167,8 @@ export function createApp({ storage, adminToken, maxObjectBytes }: Deps): Hono {
         if (!release) return fail(c, 404, `version ${version} was never published under ${appId}/${pkg}/${hostVersion}`);
         const rollout = parseRollout(body?.["rollout"], current && current.version === version ? current.rollout : 100);
         if (rollout === null) return fail(c, 400, "rollout must be an integer from 0 to 100");
+        const backwards = await movesBack(storage, appId, pkg, hostVersion, current, version, release.createdAt);
+        if (backwards) return fail(c, 409, backwards);
         const pointer: PointerDoc = { version, rollout, signature: release.signature };
         await storage.putDoc(docKeys.pointer(appId, pkg, hostVersion, channel), pointer);
         return c.json(pointer);
@@ -211,6 +213,9 @@ export function createApp({ storage, adminToken, maxObjectBytes }: Deps): Hono {
             if (info.sha256 !== manifest.hashes[module]) return fail(c, 409, `${version}/${path} does not match manifest.hashes`);
         }
 
+        const current = await storage.getDoc<PointerDoc>(docKeys.pointer(appId, pkg, hostVersion, channel));
+        const backwards = await movesBack(storage, appId, pkg, hostVersion, current, version, manifest.createdAt);
+        if (backwards) return fail(c, 409, backwards);
         const releaseKey = docKeys.release(appId, pkg, hostVersion, version);
         const existing = await storage.getDoc<ReleaseRecord>(releaseKey);
         const release: ReleaseRecord = { createdAt: manifest.createdAt, signature, publishedAt: existing?.publishedAt ?? new Date().toISOString() };
@@ -302,4 +307,15 @@ async function json(c: Context): Promise<Record<string, unknown> | null> {
 function parseRollout(value: unknown, fallback: number): number | null {
     if (value === undefined) return fallback;
     return Number.isInteger(value) && (value as number) >= 0 && (value as number) <= 100 ? (value as number) : null;
+}
+
+/**
+ * Why pointing [version] would move the channel back, or null. Pointers only move forward: a rollback
+ * is a new version with the old content (docs/updates.md §6.2), so every device can reach it.
+ */
+async function movesBack(storage: Storage, app: string, pkg: string, hostVersion: string, current: PointerDoc | null, version: string, createdAt: string): Promise<string | null> {
+    if (!current || current.version === version) return null;
+    const at = await storage.getDoc<ReleaseRecord>(docKeys.release(app, pkg, hostVersion, current.version));
+    if (!at || createdAt > at.createdAt) return null;
+    return `the channel is at ${current.version} (${at.createdAt}); ${version} (${createdAt}) is not newer. Pointers only move forward: publish the old content as a new version`;
 }

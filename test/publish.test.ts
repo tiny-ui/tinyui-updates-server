@@ -114,7 +114,7 @@ describe("publishing and delivery", () => {
         expect((await publishPointer(app, "staging", pkg, "1", p, token)).status).toBe(200);
     });
 
-    it("promotes, rolls back and re-rolls out without re-uploading or re-signing", async () => {
+    it("promotes and re-rolls out without re-uploading or re-signing; pointers never move back", async () => {
         const v1 = await signedPackage({ version: "v1", createdAt: "2026-09-22T10:00:00Z" });
         const key = { publicKey: v1.publicKey, privateKey: v1.privateKey };
         const v2 = await signedPackage({ version: "v2", createdAt: "2026-09-22T11:00:00Z", key });
@@ -134,18 +134,21 @@ describe("publishing and delivery", () => {
         const wider = await request(`/${app}/production/${pkg}/1/pointer`, { method: "POST", token, json: { rollout: 100 } });
         expect(await wider.json()).toEqual({ version: "v2", rollout: 100, signature: v2.signature });
 
-        // rollback is the same operation pointing back
-        const rollback = await request(`/${app}/production/${pkg}/1/pointer`, { method: "POST", token, json: { version: "v1" } });
-        expect(await rollback.json()).toEqual({ version: "v1", rollout: 100, signature: v1.signature });
-        expect(await (await request(`/${app}/production/${pkg}/1/current.json`)).json()).toEqual({ version: "v1", rollout: 100, signature: v1.signature });
+        // a rollback is a new version, never a pointer moved back: neither promote nor publish goes backwards
+        const back = await request(`/${app}/production/${pkg}/1/pointer`, { method: "POST", token, json: { version: "v1" } });
+        expect(back.status).toBe(409);
+        expect(await back.text()).toContain("only move forward");
+        expect((await publishPointer(app, "staging", pkg, "1", v1, token)).status).toBe(409);
+        expect((await publishPointer(app, "staging", pkg, "1", v2, token)).status, "the same version again is not a move").toBe(200);
+        expect(await (await request(`/${app}/production/${pkg}/1/current.json`)).json()).toEqual({ version: "v2", rollout: 100, signature: v2.signature });
 
         expect((await request(`/${app}/production/${pkg}/1/pointer`, { method: "POST", token, json: { version: "v9" } })).status).toBe(404);
-        expect((await request(`/${app}/production/${pkg}/1/pointer`, { method: "POST", token, json: { version: "v1", rollout: 101 } })).status).toBe(400);
+        expect((await request(`/${app}/production/${pkg}/1/pointer`, { method: "POST", token, json: { version: "v2", rollout: 101 } })).status).toBe(400);
 
         const releases = await request(`/${app}/${pkg}/1/releases`, { token });
         const listed = (await releases.json()) as { versions: { version: string }[]; channels: Record<string, { version: string; rollout: number }> };
         expect(listed.versions.map((v) => v.version)).toEqual(["v2", "v1"]);
-        expect(listed.channels).toEqual({ staging: { version: "v2", rollout: 100 }, production: { version: "v1", rollout: 100 } });
+        expect(listed.channels).toEqual({ staging: { version: "v2", rollout: 100 }, production: { version: "v2", rollout: 100 } });
     });
 
     it("accepts a package tinyui bundle signed with Node's crypto", async () => {
