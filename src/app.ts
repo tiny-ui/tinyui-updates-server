@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import type { Context } from "hono";
 import { anyPackageToken, canManage, docKeys, isAdmin, issueAppToken, issueToken, packageToken, revokeAppToken, revokeToken } from "./auth.ts";
 import { isHostVersion, isName, isObjectPath, isSegment } from "./ids.ts";
-import { parseManifest } from "./manifest.ts";
+import { instant, parseManifest } from "./manifest.ts";
 import type { AppRecord, PackageRecord, PointerDoc, ReleaseRecord } from "./records.ts";
 import { isPublicKey, verifySignature } from "./signature.ts";
 import { sha256Hex, type Storage } from "./storage.ts";
@@ -225,7 +225,7 @@ export function createApp({ storage, adminToken, maxObjectBytes }: Deps): Hono {
         const release: ReleaseRecord = { createdAt: manifest.createdAt, signature, publishedAt: existing?.publishedAt ?? new Date().toISOString() };
         await storage.putDoc(releaseKey, release);
         const pointer: PointerDoc = { version, rollout, signature };
-        if (!(await storage.putDocIf(pointerKey, pointer, at?.revision ?? null))) return fail(c, 409, MOVED_MEANWHILE);
+        if (!(await storage.putDocIf(pointerKey, pointer, at?.revision ?? null))) return fail(c, 409, `${version} is recorded and can be promoted, but ${MOVED_MEANWHILE}`);
         return c.json(pointer);
     });
 
@@ -320,7 +320,10 @@ function parseRollout(value: unknown, fallback: number): number | null {
 async function movesBack(storage: Storage, app: string, pkg: string, hostVersion: string, current: PointerDoc | null, version: string, createdAt: string): Promise<string | null> {
     if (!current || current.version === version) return null;
     const at = await storage.getDoc<ReleaseRecord>(docKeys.release(app, pkg, hostVersion, current.version));
-    if (!at || createdAt > at.createdAt) return null;
+    if (!at) return null;
+    const from = instant(at.createdAt);
+    const to = instant(createdAt);
+    if (from !== null && to !== null && to > from) return null;
     return `the channel is at ${current.version} (${at.createdAt}); ${version} (${createdAt}) is not newer. Pointers only move forward: publish the old content as a new version`;
 }
 

@@ -169,13 +169,17 @@ describe("publishing and delivery", () => {
         for (const r of [r2, r3]) expect([200, 409]).toContain(r.status);
     });
 
-    it("refuses a createdAt that does not sort as it reads", async () => {
+    it("refuses a createdAt that is not one real instant in the one form", async () => {
         const p = await signedPackage({ createdAt: "2026-09-22T10:00:00.500Z" });
         const { app, pkg, token } = await setup({ publicKey: p.publicKey });
         await uploadContent(app, pkg, "1", p, token);
         const response = await publishPointer(app, "staging", pkg, "1", p, token);
         expect(response.status).toBe(400);
-        expect(await response.text()).toContain("createdAt is not YYYY-MM-DDTHH:MM:SSZ");
+        expect(await response.text()).toContain("createdAt is not a real YYYY-MM-DDTHH:MM:SSZ instant");
+
+        const impossible = await signedPackage({ version: "impossible", createdAt: "2026-02-30T10:00:00Z", key: { publicKey: p.publicKey, privateKey: p.privateKey } });
+        await uploadContent(app, pkg, "1", impossible, token);
+        expect((await publishPointer(app, "staging", pkg, "1", impossible, token)).status).toBe(400);
     });
 
     it("accepts a package tinyui bundle signed with Node's crypto", async () => {
