@@ -53,6 +53,7 @@ export function parseManifest(text: string): Manifest {
     if (!isName(manifest.name)) throw new Error("manifest.json name is not a package name");
     if (!isSegment(manifest.version)) throw new Error("manifest.json version is not a path segment");
     if (!isHostVersion(manifest.hostVersion)) throw new Error("manifest.json hostVersion is not a positive integer");
+    if (instant(manifest.createdAt) === null) throw new Error("manifest.json createdAt is not a real YYYY-MM-DDTHH:MM:SSZ instant");
     if (!looksLikePublicKey(manifest.publicKey)) throw new Error("manifest.json publicKey is not a P-256 point");
     const modules = [...manifest.runtime, ...manifest.pages];
     if (new Set(modules).size !== modules.length) throw new Error("manifest.json lists a module twice");
@@ -67,4 +68,12 @@ export function parseManifest(text: string): Manifest {
         if (!/^[0-9a-f]{64}$/.test(hash)) throw new Error("manifest.json hashes must be sha256 hex");
     }
     return manifest;
+}
+
+/** Milliseconds of a `YYYY-MM-DDTHH:MM:SSZ` that names a real instant, as `tinyui build` writes it; null otherwise. */
+export function instant(value: string): number | null {
+    if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(value)) return null;
+    const ms = Date.parse(value);
+    // Date.parse rolls 2026-02-30 over into March: only a round trip proves the fields were in range
+    return Number.isNaN(ms) || new Date(ms).toISOString() !== value.replace("Z", ".000Z") ? null : ms;
 }

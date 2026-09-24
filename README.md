@@ -28,7 +28,7 @@ All requests carry `Authorization: Bearer <token>`.
 | `PUT /<app>/<pkg>/<hostVersion>/<version>/<path>` | upload one file (idempotent; different bytes at an existing path → 409) |
 | `PUT /<app>/<channel>/<pkg>/<hostVersion>/current.json` with `{ version, signature, rollout? }` | publish: verifies the signature over the uploaded `manifest.json` with the registered key, checks `name` / `hostVersion` / `version` / `publicKey` and every file's sha256, records the release, moves the pointer |
 | `GET /<app>/<pkg>/<hostVersion>/releases` | published versions and where each channel points |
-| `POST /<app>/<channel>/<pkg>/<hostVersion>/pointer` with `{ version?, rollout? }` | rollback, promotion and rollout changes are the same operation |
+| `POST /<app>/<channel>/<pkg>/<hostVersion>/pointer` with `{ version?, rollout? }` | promotion and rollout changes; the pointer only moves to a newer version (a rollback is a new version with the old content), 409 otherwise |
 
 `tinyui publish` / `tinyui releases …` in `tinyui-cli` are thin clients of these endpoints.
 
