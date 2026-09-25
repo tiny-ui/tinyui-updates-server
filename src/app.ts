@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import type { Context } from "hono";
 import { anyPackageToken, canManage, docKeys, isAdmin, issueAppToken, issueToken, packageToken, revokeAppToken, revokeToken } from "./auth.ts";
 import { isHostVersion, isName, isObjectPath, isSegment } from "./ids.ts";
-import { instant, parseManifest } from "./manifest.ts";
+import { instant, parseManifest, payload } from "./manifest.ts";
 import type { AppRecord, PackageRecord, PointerDoc, ReleaseRecord } from "./records.ts";
 import { isPublicKey, verifySignature } from "./signature.ts";
 import { sha256Hex, type Storage } from "./storage.ts";
@@ -208,11 +208,10 @@ export function createApp({ storage, adminToken, maxObjectBytes }: Deps): Hono {
         if (manifest.hostVersion !== hostVersion) return fail(c, 400, `manifest hostVersion ${manifest.hostVersion} is not the path host version ${hostVersion}`);
         if (manifest.version !== version) return fail(c, 400, `manifest version ${manifest.version} is not the pointer version ${version}`);
         if (manifest.publicKey !== registered.publicKey) return fail(c, 400, "manifest publicKey is not the registered one");
-        for (const module of manifest.pages) {
-            const path = manifest.files[module] + ".bin";
+        for (const { path, hashKey } of payload(manifest)) {
             const info = await storage.headObject(objectKey(appId, pkg, hostVersion, version, path));
             if (!info) return fail(c, 409, `${version}/${path} is not uploaded yet`);
-            if (info.sha256 !== manifest.hashes[module]) return fail(c, 409, `${version}/${path} does not match manifest.hashes`);
+            if (info.sha256 !== manifest.hashes[hashKey]) return fail(c, 409, `${version}/${path} does not match manifest.hashes`);
         }
 
         const pointerKey = docKeys.pointer(appId, pkg, hostVersion, channel);

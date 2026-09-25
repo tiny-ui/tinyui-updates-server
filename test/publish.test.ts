@@ -51,6 +51,40 @@ describe("publishing and delivery", () => {
         expect((await request(`/${app}/production/${pkg}/1/current.json`)).status).toBe(404);
     });
 
+    it("publishes a package with strings only once they are uploaded and match, and serves them", async () => {
+        const p = await signedPackage({ i18n: { en: '{"hi":"Hi"}', zh: '{"hi":"你好"}' } });
+        const { app, pkg, token } = await setup({ publicKey: p.publicKey });
+        await request(`/${app}/${pkg}/1/${p.version}/pages/home.bin`, { method: "PUT", token, body: p.files["pages/home.bin"] as BodyInit });
+        await request(`/${app}/${pkg}/1/${p.version}/manifest.json`, { method: "PUT", token, body: p.manifest as BodyInit });
+        const missing = await publishPointer(app, "production", pkg, "1", p, token);
+        expect(missing.status).toBe(409);
+        expect(await missing.text()).toContain("i18n/en.json is not uploaded yet");
+
+        await uploadContent(app, pkg, "1", p, token);
+        const published = await publishPointer(app, "production", pkg, "1", p, token);
+        expect(published.status, await published.clone().text()).toBe(200);
+        const zh = await request(`/${app}/production/${pkg}/1/${p.version}/i18n/zh.json`);
+        expect(await zh.text()).toBe('{"hi":"你好"}');
+    });
+
+    it("refuses a manifest whose hashes leave out a string file", async () => {
+        const p = await signedPackage({ i18n: { en: "{}" }, edit: (m) => { delete (m["hashes"] as Record<string, string>)["i18n/en.json"]; } });
+        const { app, pkg, token } = await setup({ publicKey: p.publicKey });
+        await uploadContent(app, pkg, "1", p, token);
+        const r = await publishPointer(app, "production", pkg, "1", p, token);
+        expect(r.status).toBe(400);
+        expect(await r.text()).toContain("hashes does not cover exactly the modules in pages and the i18n files");
+    });
+
+    it("refuses a default language without a file", async () => {
+        const p = await signedPackage({ i18n: { en: "{}" }, edit: (m) => { (m["i18n"] as { default: string }).default = "fr"; } });
+        const { app, pkg, token } = await setup({ publicKey: p.publicKey });
+        await uploadContent(app, pkg, "1", p, token);
+        const r = await publishPointer(app, "production", pkg, "1", p, token);
+        expect(r.status).toBe(400);
+        expect(((await r.json()) as { error: string }).error).toContain('i18n default "fr" has no file');
+    });
+
     it("keeps a version immutable: the same bytes again are fine, different ones are refused", async () => {
         const p = await signedPackage();
         const { app, pkg, token } = await setup({ publicKey: p.publicKey });
