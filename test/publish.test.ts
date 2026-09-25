@@ -82,7 +82,7 @@ describe("publishing and delivery", () => {
         await uploadContent(app, pkg, "1", p, token);
         const r = await publishPointer(app, "production", pkg, "1", p, token);
         expect(r.status).toBe(400);
-        expect(await r.text()).toContain('i18n default "fr" has no file');
+        expect(((await r.json()) as { error: string }).error).toContain('i18n default "fr" has no file');
     });
 
     it("keeps a version immutable: the same bytes again are fine, different ones are refused", async () => {
