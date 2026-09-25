@@ -64,6 +64,8 @@ export function parseManifest(text: string): Manifest {
         if (typeof i18n !== "object" || i18n === null || typeof i18n["default"] !== "string" || typeof files !== "object" || files === null || !Object.values(files).every((v) => typeof v === "string")) {
             throw new Error("manifest.json i18n must be { default, files: { language: path } }");
         }
+        // the runtime falls back to the default language, so it has to be one of the files
+        if (!Object.hasOwn(files, i18n["default"])) throw new Error(`manifest.json i18n default ${JSON.stringify(i18n["default"])} has no file`);
         manifest.i18n = { default: i18n["default"], files: files as Record<string, string> };
     }
     if (!isName(manifest.name)) throw new Error("manifest.json name is not a package name");

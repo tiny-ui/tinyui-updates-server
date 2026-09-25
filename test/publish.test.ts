@@ -76,6 +76,15 @@ describe("publishing and delivery", () => {
         expect(await r.text()).toContain("hashes does not cover exactly the modules in pages and the i18n files");
     });
 
+    it("refuses a default language without a file", async () => {
+        const p = await signedPackage({ i18n: { en: "{}" }, edit: (m) => { (m["i18n"] as { default: string }).default = "fr"; } });
+        const { app, pkg, token } = await setup({ publicKey: p.publicKey });
+        await uploadContent(app, pkg, "1", p, token);
+        const r = await publishPointer(app, "production", pkg, "1", p, token);
+        expect(r.status).toBe(400);
+        expect(await r.text()).toContain('i18n default "fr" has no file');
+    });
+
     it("keeps a version immutable: the same bytes again are fine, different ones are refused", async () => {
         const p = await signedPackage();
         const { app, pkg, token } = await setup({ publicKey: p.publicKey });
