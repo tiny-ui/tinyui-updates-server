@@ -18,7 +18,7 @@ export interface Manifest {
 /** Every file of the version besides `manifest.json`, with its key into `hashes`. */
 export function payload(manifest: Manifest): { path: string; hashKey: string }[] {
     return [
-        ...manifest.pages.map((module) => ({ path: `${manifest.files[module]}.bin`, hashKey: module })),
+        ...manifest.pages.map((module) => ({ path: `${manifest.files[module]}.qjsb`, hashKey: module })),
         ...Object.values(manifest.i18n?.files ?? {}).map((path) => ({ path, hashKey: path })),
     ];
 }
@@ -82,7 +82,7 @@ export function parseManifest(text: string): Manifest {
         if (keys.join("\n") !== [...expected[key]].sort().join("\n")) throw new Error(`manifest.json ${key} does not cover exactly the modules in pages${key === "hashes" ? " and the i18n files" : ""}`);
     }
     for (const path of Object.values(manifest.files)) {
-        if (!isObjectPath(path + ".bin")) throw new Error(`manifest.json files entry ${path} is not a file path`);
+        if (!isObjectPath(path + ".qjsb")) throw new Error(`manifest.json files entry ${path} is not a file path`);
     }
     for (const path of strings) {
         if (!isObjectPath(path)) throw new Error(`manifest.json i18n file ${path} is not a file path`);

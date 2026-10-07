@@ -22,10 +22,10 @@ describe("publishing and delivery", () => {
         expect(manifest.status).toBe(200);
         expect(manifest.headers.get("cache-control")).toBe("public, max-age=31536000, immutable");
         expect(new Uint8Array(await manifest.arrayBuffer())).toEqual(p.manifest);
-        const home = await request(`/${app}/production/${pkg}/1/${p.version}/pages/home.bin`);
+        const home = await request(`/${app}/production/${pkg}/1/${p.version}/pages/home.qjsb`);
         expect(new TextDecoder().decode(await home.arrayBuffer())).toBe(`HOME-${p.version}`);
         // the channel is a pointer, not a place: another channel reads the same bytes even before it points there
-        expect((await request(`/${app}/staging/${pkg}/1/${p.version}/pages/home.bin`)).status).toBe(200);
+        expect((await request(`/${app}/staging/${pkg}/1/${p.version}/pages/home.qjsb`)).status).toBe(200);
         expect((await request(`/${app}/staging/${pkg}/1/current.json`)).status).toBe(404);
     });
 
@@ -39,9 +39,9 @@ describe("publishing and delivery", () => {
         await request(`/${app}/${pkg}/1/${p.version}/manifest.json`, { method: "PUT", token, body: p.manifest as BodyInit });
         const missing = await publishPointer(app, "production", pkg, "1", p, token);
         expect(missing.status).toBe(409);
-        expect(await missing.text()).toContain("pages/home.bin is not uploaded yet");
+        expect(await missing.text()).toContain("pages/home.qjsb is not uploaded yet");
 
-        const tampered = await signedPackage({ files: { "pages/home.bin": "HOME-x" }, key: { publicKey: p.publicKey, privateKey: p.privateKey } });
+        const tampered = await signedPackage({ files: { "pages/home.qjsb": "HOME-x" }, key: { publicKey: p.publicKey, privateKey: p.privateKey } });
         for (const [path, bytes] of Object.entries(tampered.files)) {
             await request(`/${app}/${pkg}/1/${p.version}/${path}`, { method: "PUT", token, body: bytes as BodyInit });
         }
@@ -54,7 +54,7 @@ describe("publishing and delivery", () => {
     it("publishes a package with strings only once they are uploaded and match, and serves them", async () => {
         const p = await signedPackage({ i18n: { en: '{"hi":"Hi"}', zh: '{"hi":"你好"}' } });
         const { app, pkg, token } = await setup({ publicKey: p.publicKey });
-        await request(`/${app}/${pkg}/1/${p.version}/pages/home.bin`, { method: "PUT", token, body: p.files["pages/home.bin"] as BodyInit });
+        await request(`/${app}/${pkg}/1/${p.version}/pages/home.qjsb`, { method: "PUT", token, body: p.files["pages/home.qjsb"] as BodyInit });
         await request(`/${app}/${pkg}/1/${p.version}/manifest.json`, { method: "PUT", token, body: p.manifest as BodyInit });
         const missing = await publishPointer(app, "production", pkg, "1", p, token);
         expect(missing.status).toBe(409);
@@ -88,14 +88,14 @@ describe("publishing and delivery", () => {
     it("keeps a version immutable: the same bytes again are fine, different ones are refused", async () => {
         const p = await signedPackage();
         const { app, pkg, token } = await setup({ publicKey: p.publicKey });
-        const first = await request(`/${app}/${pkg}/1/${p.version}/pages/home.bin`, { method: "PUT", token, body: p.files["pages/home.bin"] as BodyInit });
+        const first = await request(`/${app}/${pkg}/1/${p.version}/pages/home.qjsb`, { method: "PUT", token, body: p.files["pages/home.qjsb"] as BodyInit });
         expect(first.status).toBe(201);
-        const again = await request(`/${app}/${pkg}/1/${p.version}/pages/home.bin`, { method: "PUT", token, body: p.files["pages/home.bin"] as BodyInit });
+        const again = await request(`/${app}/${pkg}/1/${p.version}/pages/home.qjsb`, { method: "PUT", token, body: p.files["pages/home.qjsb"] as BodyInit });
         expect(again.status).toBe(200);
         expect(await again.json()).toMatchObject({ existing: true });
-        const other = await request(`/${app}/${pkg}/1/${p.version}/pages/home.bin`, { method: "PUT", token, body: "something else" });
+        const other = await request(`/${app}/${pkg}/1/${p.version}/pages/home.qjsb`, { method: "PUT", token, body: "something else" });
         expect(other.status).toBe(409);
-        const tooBig = await request(`/${app}/${pkg}/1/${p.version}/pages/big.bin`, { method: "PUT", token, body: new Uint8Array(1048577) as BodyInit });
+        const tooBig = await request(`/${app}/${pkg}/1/${p.version}/pages/big.qjsb`, { method: "PUT", token, body: new Uint8Array(1048577) as BodyInit });
         expect(tooBig.status).toBe(413);
     });
 
@@ -246,7 +246,7 @@ describe("publishing and delivery", () => {
             "",
         ].join("\n");
         const { app, pkg, token } = await setup({ publicKey });
-        for (const [path, text] of Object.entries({ "pages/home.bin": "HOME2" })) {
+        for (const [path, text] of Object.entries({ "pages/home.qjsb": "HOME2" })) {
             expect((await request(`/${app}/${pkg}/1/${version}/${path}`, { method: "PUT", token, body: text })).status).toBe(201);
         }
         expect((await request(`/${app}/${pkg}/1/${version}/manifest.json`, { method: "PUT", token, body: manifest })).status).toBe(201);
@@ -263,7 +263,7 @@ describe("publishing and delivery", () => {
         const { app, pkg, token } = await setup({ publicKey: v1.publicKey });
 
         // two different bodies race for one path: exactly one wins, the other is told so
-        const race = await Promise.all(["one", "two"].map((body) => request(`/${app}/${pkg}/1/v1/pages/race.bin`, { method: "PUT", token, body })));
+        const race = await Promise.all(["one", "two"].map((body) => request(`/${app}/${pkg}/1/v1/pages/race.qjsb`, { method: "PUT", token, body })));
         expect(race.map((r) => r.status).sort()).toEqual([201, 409]);
 
         await uploadContent(app, pkg, "1", v1, token);
@@ -280,7 +280,7 @@ describe("publishing and delivery", () => {
         const p = await signedPackage();
         const { app, pkg, token } = await setup({ publicKey: p.publicKey });
         expect((await request(`/${app}/${pkg}/1/../manifest.json`, { method: "PUT", token, body: "x" })).status).not.toBe(201);
-        expect((await request(`/${app}/${pkg}/1/v1/..%2Fescape.bin`, { method: "PUT", token, body: "x" })).status).toBe(404);
+        expect((await request(`/${app}/${pkg}/1/v1/..%2Fescape.qjsb`, { method: "PUT", token, body: "x" })).status).toBe(404);
         expect((await request(`/${app}/Prod/${pkg}/1/current.json`)).status).toBe(404);
         // `apps` is reserved: never served as an app
         expect((await request(`/apps/production/${pkg}/1/current.json`)).status).toBe(404);

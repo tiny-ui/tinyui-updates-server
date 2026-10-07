@@ -34,11 +34,11 @@ export async function signedPackage(options: {
     const version = options.version ?? "20260922T100000Z-abcdef1";
     const key = options.key ?? (await newKeyPair());
     const strings = Object.fromEntries(Object.entries(options.i18n ?? {}).map(([language, text]) => [`i18n/${language}.json`, text]));
-    const contents = { ...(options.files ?? { "pages/home.bin": `HOME-${version}` }), ...strings };
+    const contents = { ...(options.files ?? { "pages/home.qjsb": `HOME-${version}` }), ...strings };
     const files = Object.fromEntries(Object.entries(contents).map(([p, text]) => [p, new TextEncoder().encode(text)]));
     const modules: Record<string, string> = { [`${name}/home`]: "pages/home" };
     const hashes: Record<string, string> = {};
-    for (const [module, path] of Object.entries(modules)) hashes[module] = await sha256Hex(files[`${path}.bin`]!);
+    for (const [module, path] of Object.entries(modules)) hashes[module] = await sha256Hex(files[`${path}.qjsb`]!);
     for (const path of Object.keys(strings)) hashes[path] = await sha256Hex(files[path]!);
     const manifest: Record<string, unknown> = {
         pages: [`${name}/home`],

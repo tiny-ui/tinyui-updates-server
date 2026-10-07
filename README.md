@@ -13,7 +13,7 @@ Two kinds of `GET`, relative to `https://<host>/<app>/<channel>`:
 | Path | Content | Cache |
 |---|---|---|
 | `<pkg>/<hostVersion>/current.json` | mutable pointer: `{ version, rollout, signature }` | `no-store` |
-| `<pkg>/<hostVersion>/<version>/…` | immutable content: `manifest.json`, `pages/**/*.bin` (the runtime ships inside the App, not in packages) | `immutable` |
+| `<pkg>/<hostVersion>/<version>/…` | immutable content: `manifest.json`, `pages/**/*.qjsb` (the runtime ships inside the App, not in packages) | `immutable` |
 
 `<hostVersion>` is the positive integer a host App declares for what it promises to pages: it goes up when host components or capabilities change, when pages may use a newer TinyUI runtime, or when the JS engine changes. It is not the TinyUI version: upgrading TinyUI alone leaves it as is, and the manifest's `engine` / `tinyui` are checked on their own; it plays the role of Expo's `runtimeVersion` but is always a positive integer that counts host changes, never an App version such as `1.2.0`; see the TinyUI repo's `docs/updates.md`.
 
