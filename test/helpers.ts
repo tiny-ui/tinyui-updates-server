@@ -29,17 +29,19 @@ export async function signedPackage(options: {
     files?: Record<string, string>;
     /** language → the text of `i18n/<language>.json`; the first one is the default */
     i18n?: Record<string, string>;
+    /** path inside the version (`assets/<hash>.png`) → its bytes as text, listed in manifest.assets */
+    assets?: Record<string, string>;
 } = {}): Promise<SignedPackage> {
     const name = options.name ?? "shop";
     const version = options.version ?? "20260922T100000Z-abcdef1";
     const key = options.key ?? (await newKeyPair());
     const strings = Object.fromEntries(Object.entries(options.i18n ?? {}).map(([language, text]) => [`i18n/${language}.json`, text]));
-    const contents = { ...(options.files ?? { "pages/home.jsb": `HOME-${version}` }), ...strings };
+    const contents = { ...(options.files ?? { "pages/home.jsb": `HOME-${version}` }), ...strings, ...options.assets };
     const files = Object.fromEntries(Object.entries(contents).map(([p, text]) => [p, new TextEncoder().encode(text)]));
     const modules: Record<string, string> = { [`${name}/home`]: "pages/home" };
     const hashes: Record<string, string> = {};
     for (const [module, path] of Object.entries(modules)) hashes[module] = await sha256Hex(files[`${path}.jsb`]!);
-    for (const path of Object.keys(strings)) hashes[path] = await sha256Hex(files[path]!);
+    for (const path of [...Object.keys(strings), ...Object.keys(options.assets ?? {})]) hashes[path] = await sha256Hex(files[path]!);
     const manifest: Record<string, unknown> = {
         pages: [`${name}/home`],
         files: modules,
@@ -52,6 +54,7 @@ export async function signedPackage(options: {
         tinyui: "0.7.0",
         hashes,
         hostVersion: options.hostVersion ?? "1",
+        ...(options.assets && { assets: Object.keys(options.assets) }),
         ...(options.i18n && {
             i18n: { default: Object.keys(options.i18n)[0], files: Object.fromEntries(Object.keys(options.i18n).map((language) => [language, `i18n/${language}.json`])) },
         }),
