@@ -13,6 +13,8 @@ export interface Manifest {
     hostVersion: string;
     /** The package's strings: language → file path inside the version directory (tinyui docs/build-chain.md §8). */
     i18n?: { default: string; files: Record<string, string> };
+    /** Images the pages import, paths inside the version directory; each one is also a key of `hashes` (tinyui docs/build-chain.md §12). */
+    assets?: string[];
 }
 
 /** Every file of the version besides `manifest.json`, with its key into `hashes`. */
@@ -20,6 +22,7 @@ export function payload(manifest: Manifest): { path: string; hashKey: string }[]
     return [
         ...manifest.pages.map((module) => ({ path: `${manifest.files[module]}.jsb`, hashKey: module })),
         ...Object.values(manifest.i18n?.files ?? {}).map((path) => ({ path, hashKey: path })),
+        ...(manifest.assets ?? []).map((path) => ({ path, hashKey: path })),
     ];
 }
 
@@ -68,6 +71,11 @@ export function parseManifest(text: string): Manifest {
         if (!Object.hasOwn(files, i18n["default"])) throw new Error(`manifest.json i18n default ${JSON.stringify(i18n["default"])} has no file`);
         manifest.i18n = { default: i18n["default"], files: files as Record<string, string> };
     }
+    if (m["assets"] !== undefined) {
+        const assets = m["assets"];
+        if (!Array.isArray(assets) || !assets.every((a) => typeof a === "string")) throw new Error("manifest.json assets must list paths inside the version");
+        manifest.assets = assets as string[];
+    }
     if (!isName(manifest.name)) throw new Error("manifest.json name is not a package name");
     if (!isSegment(manifest.version)) throw new Error("manifest.json version is not a path segment");
     if (!isHostVersion(manifest.hostVersion)) throw new Error("manifest.json hostVersion is not a positive integer");
@@ -76,16 +84,21 @@ export function parseManifest(text: string): Manifest {
     const modules = manifest.pages;
     if (new Set(modules).size !== modules.length) throw new Error("manifest.json lists a module twice");
     const strings = Object.values(manifest.i18n?.files ?? {});
-    const expected = { files: modules, hashes: [...modules, ...strings] };
+    const assets = manifest.assets ?? [];
+    if (new Set(assets).size !== assets.length) throw new Error("manifest.json lists an asset twice");
+    const expected = { files: modules, hashes: [...modules, ...strings, ...assets] };
     for (const key of ["files", "hashes"] as const) {
         const keys = Object.keys(manifest[key]).sort();
-        if (keys.join("\n") !== [...expected[key]].sort().join("\n")) throw new Error(`manifest.json ${key} does not cover exactly the modules in pages${key === "hashes" ? " and the i18n files" : ""}`);
+        if (keys.join("\n") !== [...expected[key]].sort().join("\n")) throw new Error(`manifest.json ${key} does not cover exactly the modules in pages${key === "hashes" ? ", the i18n files and the assets" : ""}`);
     }
     for (const path of Object.values(manifest.files)) {
         if (!isObjectPath(path + ".jsb")) throw new Error(`manifest.json files entry ${path} is not a file path`);
     }
     for (const path of strings) {
         if (!isObjectPath(path)) throw new Error(`manifest.json i18n file ${path} is not a file path`);
+    }
+    for (const path of assets) {
+        if (!isObjectPath(path)) throw new Error(`manifest.json asset ${path} is not a file path`);
     }
     for (const hash of Object.values(manifest.hashes)) {
         if (!/^[0-9a-f]{64}$/.test(hash)) throw new Error("manifest.json hashes must be sha256 hex");

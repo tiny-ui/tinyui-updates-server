@@ -73,7 +73,46 @@ describe("publishing and delivery", () => {
         await uploadContent(app, pkg, "1", p, token);
         const r = await publishPointer(app, "production", pkg, "1", p, token);
         expect(r.status).toBe(400);
-        expect(await r.text()).toContain("hashes does not cover exactly the modules in pages and the i18n files");
+        expect(await r.text()).toContain("hashes does not cover exactly the modules in pages, the i18n files and the assets");
+    });
+
+    it("publishes a package with images only once they are uploaded and match, and serves them", async () => {
+        const p = await signedPackage({ assets: { "assets/0123abcd.png": "PNG-1" } });
+        const { app, pkg, token } = await setup({ publicKey: p.publicKey });
+        await request(`/${app}/${pkg}/1/${p.version}/pages/home.jsb`, { method: "PUT", token, body: p.files["pages/home.jsb"] as BodyInit });
+        await request(`/${app}/${pkg}/1/${p.version}/manifest.json`, { method: "PUT", token, body: p.manifest as BodyInit });
+        const missing = await publishPointer(app, "production", pkg, "1", p, token);
+        expect(missing.status).toBe(409);
+        expect(await missing.text()).toContain("assets/0123abcd.png is not uploaded yet");
+
+        await request(`/${app}/${pkg}/1/${p.version}/assets/0123abcd.png`, { method: "PUT", token, body: new TextEncoder().encode("PNG-x") as BodyInit });
+        const mismatch = await publishPointer(app, "production", pkg, "1", p, token);
+        expect(mismatch.status).toBe(409);
+        expect(await mismatch.text()).toContain("assets/0123abcd.png does not match manifest.hashes");
+    });
+
+    it("serves the images of a published package", async () => {
+        const p = await signedPackage({ assets: { "assets/0123abcd.png": "PNG-1" } });
+        const { app, pkg, token } = await setup({ publicKey: p.publicKey });
+        await uploadContent(app, pkg, "1", p, token);
+        const published = await publishPointer(app, "production", pkg, "1", p, token);
+        expect(published.status, await published.clone().text()).toBe(200);
+        expect(await (await request(`/${app}/production/${pkg}/1/${p.version}/assets/0123abcd.png`)).text()).toBe("PNG-1");
+    });
+
+    it("refuses a manifest whose hashes leave out an image, or that lists one twice", async () => {
+        const left = await signedPackage({ assets: { "assets/a.png": "A" }, edit: (m) => { delete (m["hashes"] as Record<string, string>)["assets/a.png"]; } });
+        const { app, pkg, token } = await setup({ publicKey: left.publicKey });
+        await uploadContent(app, pkg, "1", left, token);
+        const r = await publishPointer(app, "production", pkg, "1", left, token);
+        expect(r.status).toBe(400);
+        expect(await r.text()).toContain("hashes does not cover exactly the modules in pages, the i18n files and the assets");
+
+        const twice = await signedPackage({ version: "20260922T110000Z-abcdef2", key: { publicKey: left.publicKey, privateKey: left.privateKey }, assets: { "assets/a.png": "A" }, edit: (m) => { m["assets"] = ["assets/a.png", "assets/a.png"]; } });
+        await uploadContent(app, pkg, "1", twice, token);
+        const t = await publishPointer(app, "production", pkg, "1", twice, token);
+        expect(t.status).toBe(400);
+        expect(await t.text()).toContain("lists an asset twice");
     });
 
     it("refuses a default language without a file", async () => {
